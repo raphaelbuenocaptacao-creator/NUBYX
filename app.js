@@ -7,6 +7,16 @@ const toast = $('#toast');
 const config = window.NUBYX_CONFIG || {};
 let deferredPrompt = null;
 let supabaseClient = null;
+let currentProfile = null;
+
+const STORE_CATALOG = [
+  {key:'calendar', name:'Calendário', icon:'◫', url:'https://calendar.google.com', description:'Agenda e compromissos em um só lugar.'},
+  {key:'docs', name:'Documentos', icon:'▤', url:'https://docs.google.com', description:'Crie e edite documentos na nuvem.'},
+  {key:'sheets', name:'Planilhas', icon:'▦', url:'https://sheets.google.com', description:'Planilhas e dados no seu workspace.'},
+  {key:'notion', name:'Notion', icon:'N', url:'https://www.notion.so', description:'Notas, projetos e bases de conhecimento.'},
+  {key:'figma', name:'Figma', icon:'F', url:'https://www.figma.com', description:'Design colaborativo diretamente no navegador.'},
+  {key:'github', name:'GitHub', icon:'⌘', url:'https://github.com', description:'Código, projetos e colaboração.'}
+];
 
 function showToast(message){
   toast.textContent = message;
@@ -32,19 +42,104 @@ function setConnectionState(mode){
   $('#syncDetail').textContent = isCloud ? 'conta NUBYX ID' : 'modo demonstração';
 }
 
+function getDemoApps(){
+  try { return JSON.parse(localStorage.getItem('nubyx_demo_apps') || '[]'); }
+  catch { return []; }
+}
+
+function setDemoApps(apps){
+  localStorage.setItem('nubyx_demo_apps', JSON.stringify(apps));
+}
+
+async function listInstalledApps(){
+  if(currentProfile?.mode === 'supabase' && supabaseClient){
+    const { data, error } = await supabaseClient
+      .from('user_apps')
+      .select('app_key,app_name,app_url,icon,position')
+      .order('position', {ascending:true});
+    if(error){ console.error(error); showToast('Não foi possível sincronizar seus apps.'); return []; }
+    return data || [];
+  }
+  return getDemoApps();
+}
+
+async function installApp(app){
+  if(!currentProfile) return;
+  if(currentProfile.mode === 'supabase' && supabaseClient){
+    const installed = await listInstalledApps();
+    if(installed.some(item=>item.app_key===app.key)) return showToast(`${app.name} já está instalado.`);
+    const { error } = await supabaseClient.from('user_apps').insert({
+      user_id: currentProfile.userId,
+      app_key: app.key,
+      app_name: app.name,
+      app_url: app.url,
+      icon: app.icon,
+      position: installed.length
+    });
+    if(error){ console.error(error); return showToast('Falha ao instalar app.'); }
+  } else {
+    const installed = getDemoApps();
+    if(installed.some(item=>item.app_key===app.key)) return showToast(`${app.name} já está instalado.`);
+    installed.push({app_key:app.key, app_name:app.name, app_url:app.url, icon:app.icon, position:installed.length});
+    setDemoApps(installed);
+  }
+  showToast(`${app.name} instalado no NUBYX`);
+  renderStore();
+  refreshInstalledCount();
+}
+
+async function uninstallApp(appKey){
+  if(!currentProfile) return;
+  if(currentProfile.mode === 'supabase' && supabaseClient){
+    const { error } = await supabaseClient.from('user_apps').delete().eq('app_key', appKey);
+    if(error){ console.error(error); return showToast('Falha ao remover app.'); }
+  } else {
+    setDemoApps(getDemoApps().filter(item=>item.app_key!==appKey));
+  }
+  showToast('App removido do NUBYX');
+  renderStore();
+  refreshInstalledCount();
+}
+
+async function refreshInstalledCount(){
+  const custom = await listInstalledApps();
+  $('#installedCount').textContent = 8 + custom.length;
+}
+
+async function renderStore(){
+  const installed = await listInstalledApps();
+  const installedKeys = new Set(installed.map(item=>item.app_key));
+  $('#panel').innerHTML = `<div class="panel-title"><div><span class="eyebrow">NUBYX STORE</span><h3>Apps para seu ambiente</h3></div><span class="ghost">${installed.length} extras</span></div>
+    <div class="store-grid">${STORE_CATALOG.map(app=>{
+      const has = installedKeys.has(app.key);
+      return `<article class="store-card"><div class="store-icon">${app.icon}</div><div><b>${app.name}</b><small>${app.description}</small></div><button class="${has?'ghost':'primary store-action'}" data-store-key="${app.key}" data-store-action="${has?'remove':'install'}">${has?'Remover':'Instalar'}</button></article>`;
+    }).join('')}</div>
+    <p class="fine">A NUBYX Store instala atalhos e PWAs/serviços web compatíveis. Ela não executa APKs Android dentro do PWA.</p>`;
+
+  $$('[data-store-key]').forEach(btn=>btn.addEventListener('click',()=>{
+    const app = STORE_CATALOG.find(item=>item.key===btn.dataset.storeKey);
+    if(!app) return;
+    btn.dataset.storeAction === 'remove' ? uninstallApp(app.key) : installApp(app);
+  }));
+}
+
 function enterOS(profile={email:'demo@nubyx.cloud', mode:'demo'}){
+  currentProfile = profile;
   if(profile.mode === 'demo'){
     const demoSession = { ...profile, expiresAt: Date.now() + (8 * 60 * 60 * 1000) };
     localStorage.setItem('nubyx_demo_session', JSON.stringify(demoSession));
+    currentProfile = demoSession;
   }
   setConnectionState(profile.mode);
   auth.classList.add('hidden');
   os.classList.remove('hidden');
+  refreshInstalledCount();
   showToast(profile.mode === 'supabase' ? 'NUBYX ID autenticado' : 'Modo demonstração iniciado');
 }
 
 async function exitOS(){
   localStorage.removeItem('nubyx_demo_session');
+  currentProfile = null;
   if(supabaseClient) await supabaseClient.auth.signOut();
   os.classList.add('hidden');
   auth.classList.remove('hidden');
@@ -109,7 +204,6 @@ $('#logoutBtn').addEventListener('click', exitOS);
 const panelContent = {
   home: ['CONTINUIDADE','Continue de onde parou','Projetos, notas e ações recentes sincronizadas neste ambiente.'],
   drive: ['NUBYX DRIVE','Seus arquivos na nuvem','Uploads privados, pastas, recentes e compartilhamentos entrarão aqui com Supabase Storage.'],
-  store: ['NUBYX STORE','Apps para seu ambiente','Instale PWAs e serviços web compatíveis no seu NUBYX.'],
   ai: ['NUBYX AI','Inteligência dentro do sistema','Busque arquivos, organize conteúdo e execute ações assistidas com permissões do usuário.'],
   vault: ['NUBYX VAULT','Seu espaço protegido','Uma camada extra de autenticação para documentos e arquivos sensíveis.'],
   notes: ['NOTAS','Notas rápidas','Crie e sincronize anotações no seu ambiente NUBYX.'],
@@ -119,9 +213,14 @@ const panelContent = {
 };
 
 function openModule(key){
-  const data=panelContent[key]||panelContent.home;
   $$('.dock button[data-open]').forEach(b=>b.classList.toggle('active', b.dataset.open===key));
-  $('#panel').innerHTML = `<div class="panel-title"><div><span class="eyebrow">${data[0]}</span><h3>${data[1]}</h3></div><button class="ghost">Em construção</button></div><div class="activity"><div class="activity-icon">✦</div><div><b>${data[1]}</b><small>${data[2]}</small></div><span>v0.2</span></div><div class="activity"><div class="activity-icon">●</div><div><b>Estado do módulo</b><small>Interface preparada para a próxima camada funcional.</small></div><span>Ativo</span></div>`;
+  if(key === 'store'){
+    renderStore();
+    showToast('NUBYX Store aberta');
+    return;
+  }
+  const data=panelContent[key]||panelContent.home;
+  $('#panel').innerHTML = `<div class="panel-title"><div><span class="eyebrow">${data[0]}</span><h3>${data[1]}</h3></div><button class="ghost">Em construção</button></div><div class="activity"><div class="activity-icon">✦</div><div><b>${data[1]}</b><small>${data[2]}</small></div><span>v0.3</span></div><div class="activity"><div class="activity-icon">●</div><div><b>Estado do módulo</b><small>Interface preparada para a próxima camada funcional.</small></div><span>Ativo</span></div>`;
   showToast(`${data[1]} aberto`);
 }
 $$('[data-open]').forEach(b=>b.addEventListener('click',()=>openModule(b.dataset.open)));
