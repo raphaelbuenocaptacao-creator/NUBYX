@@ -23,16 +23,17 @@
           <label>E-mail<input id="email" type="email" placeholder="voce@email.com" required autocomplete="email"></label>
           <label>Senha<input id="password" type="password" placeholder="••••••••" required minlength="6" autocomplete="current-password"></label>
           <button class="primary" type="submit">Entrar no NUBYX</button>
+          <button id="signupBtn" class="secondary" type="button" style="margin-top:10px">Criar meu NUBYX ID</button>
         </form>
         <div class="split"><span></span><small>ou</small><span></span></div>
         <button id="demoBtn" class="secondary">Explorar modo demonstração</button>
-        <p class="fine">Primeira versão: PWA + ambiente persistente local. A autenticação Supabase entra assim que as variáveis do projeto forem configuradas.</p>
+        <p id="authStatus" class="fine">Modo seguro: sem Supabase configurado, apenas a demonstração fica disponível.</p>
       </div>
     </section>
 
     <section id="os" class="os-shell hidden" aria-live="polite">
       <header class="statusbar">
-        <div><b>NUBYX</b><span class="cloud-dot"></span><small>Cloud connected</small></div>
+        <div><b>NUBYX</b><span class="cloud-dot"></span><small id="cloudStatus">Cloud connected</small></div>
         <div class="status-right"><span id="clock">--:--</span><span>◉</span><span>▰</span></div>
       </header>
       <div class="os-content">
@@ -67,13 +68,13 @@
 
         <section class="workspace">
           <div class="workspace-head">
-            <div><span class="eyebrow">SEU DISPOSITIVO</span><h2>Meu NUBYX</h2><p><span class="cloud-dot"></span> Online · PWA Cloud Workspace</p></div>
+            <div><span class="eyebrow">SEU DISPOSITIVO</span><h2>Meu NUBYX</h2><p><span class="cloud-dot"></span> <span id="workspaceStatus">Online · PWA Cloud Workspace</span></p></div>
             <button id="installBtn" class="secondary compact hidden">Instalar PWA</button>
           </div>
           <div class="metrics">
             <article class="glass"><small>Armazenamento</small><strong>2.4 GB</strong><span>de 10 GB</span><div class="bar"><i style="width:24%"></i></div></article>
             <article class="glass"><small>Apps</small><strong id="installedCount">8</strong><span>instalados</span></article>
-            <article class="glass"><small>Sincronização</small><strong>Ativa</strong><span>neste dispositivo</span></article>
+            <article class="glass"><small>Sincronização</small><strong id="syncState">Local</strong><span id="syncDetail">modo demonstração</span></article>
           </div>
           <div id="panel" class="panel glass">
             <div class="panel-title"><div><span class="eyebrow">CONTINUIDADE</span><h3>Continue de onde parou</h3></div><button class="ghost">Ver tudo</button></div>
@@ -90,6 +91,7 @@
     </section>
   </main>
   <div id="toast" class="toast"></div>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
