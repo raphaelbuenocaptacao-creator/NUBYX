@@ -1,5 +1,5 @@
-const CACHE_NAME='nubyx-v0.4.0-pwa';
-const STATIC_ASSETS=['./','./index.html','./styles.css','./future.css','./config.js','./app.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg'];
+const CACHE_NAME='nubyx-v0.5.0-drive';
+const STATIC_ASSETS=['./','./index.html','./styles.css','./future.css','./drive.css','./config.js','./app.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg'];
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 function canCache(request){
   if(request.method!=='GET'||request.headers.has('authorization')) return false;
