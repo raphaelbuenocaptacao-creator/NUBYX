@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#070b17" />
+  <meta name="description" content="NUBYX — seu ambiente digital na nuvem." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>NUBYX — Your world. Anywhere.</title>
+</head>
+<body>
+  <div class="aurora aurora-a"></div><div class="aurora aurora-b"></div>
+  <main id="app">
+    <section id="auth" class="auth-shell">
+      <div class="brand"><span class="brand-mark">N</span><div><strong>NUBYX</strong><small>Your world. Anywhere.</small></div></div>
+      <div class="auth-card glass">
+        <span class="eyebrow">NUBYX ID</span>
+        <h1>Seu mundo digital,<br><span>sempre com você.</span></h1>
+        <p>Entre no seu ambiente pessoal ou crie um novo NUBYX em segundos.</p>
+        <form id="loginForm">
+          <label>E-mail<input id="email" type="email" placeholder="voce@email.com" required autocomplete="email"></label>
+          <label>Senha<input id="password" type="password" placeholder="••••••••" required minlength="6" autocomplete="current-password"></label>
+          <button class="primary" type="submit">Entrar no NUBYX</button>
+        </form>
+        <div class="split"><span></span><small>ou</small><span></span></div>
+        <button id="demoBtn" class="secondary">Explorar modo demonstração</button>
+        <p class="fine">Primeira versão: PWA + ambiente persistente local. A autenticação Supabase entra assim que as variáveis do projeto forem configuradas.</p>
+      </div>
+    </section>
+
+    <section id="os" class="os-shell hidden" aria-live="polite">
+      <header class="statusbar">
+        <div><b>NUBYX</b><span class="cloud-dot"></span><small>Cloud connected</small></div>
+        <div class="status-right"><span id="clock">--:--</span><span>◉</span><span>▰</span></div>
+      </header>
+      <div class="os-content">
+        <aside class="dock glass">
+          <button class="dock-brand">N</button>
+          <button data-open="home" class="active">⌂<small>Home</small></button>
+          <button data-open="drive">▣<small>Drive</small></button>
+          <button data-open="store">⊞<small>Store</small></button>
+          <button data-open="ai">✦<small>AI</small></button>
+          <button data-open="vault">◇<small>Vault</small></button>
+          <button id="logoutBtn" class="dock-bottom">↪<small>Sair</small></button>
+        </aside>
+
+        <section class="phone glass">
+          <div class="phone-top"><span id="phoneClock">--:--</span><span>● ◒ ▮</span></div>
+          <div class="hero-widget">
+            <small>Olá, bem-vindo ao seu</small><h2>NUBYX</h2><p id="today">Carregando...</p>
+          </div>
+          <div class="search">⌕ <span>Buscar apps, arquivos e ações</span></div>
+          <div class="app-grid" id="appGrid">
+            <button class="app" data-app="drive"><i>▣</i><span>Drive</span></button>
+            <button class="app" data-app="store"><i>⊞</i><span>Store</span></button>
+            <button class="app" data-app="ai"><i>✦</i><span>NUBYX AI</span></button>
+            <button class="app" data-app="vault"><i>◇</i><span>Vault</span></button>
+            <button class="app" data-app="notes"><i>✎</i><span>Notas</span></button>
+            <button class="app" data-app="files"><i>◫</i><span>Arquivos</span></button>
+            <button class="app" data-app="settings"><i>⚙</i><span>Ajustes</span></button>
+            <button class="app" data-app="browser"><i>◎</i><span>Navegador</span></button>
+          </div>
+          <div class="phone-dock"><button>☎</button><button>✉</button><button>◉</button><button>◎</button></div>
+        </section>
+
+        <section class="workspace">
+          <div class="workspace-head">
+            <div><span class="eyebrow">SEU DISPOSITIVO</span><h2>Meu NUBYX</h2><p><span class="cloud-dot"></span> Online · PWA Cloud Workspace</p></div>
+            <button id="installBtn" class="secondary compact hidden">Instalar PWA</button>
+          </div>
+          <div class="metrics">
+            <article class="glass"><small>Armazenamento</small><strong>2.4 GB</strong><span>de 10 GB</span><div class="bar"><i style="width:24%"></i></div></article>
+            <article class="glass"><small>Apps</small><strong id="installedCount">8</strong><span>instalados</span></article>
+            <article class="glass"><small>Sincronização</small><strong>Ativa</strong><span>neste dispositivo</span></article>
+          </div>
+          <div id="panel" class="panel glass">
+            <div class="panel-title"><div><span class="eyebrow">CONTINUIDADE</span><h3>Continue de onde parou</h3></div><button class="ghost">Ver tudo</button></div>
+            <div class="activity"><div class="activity-icon">▣</div><div><b>Projetos</b><small>3 arquivos recentes</small></div><span>Agora</span></div>
+            <div class="activity"><div class="activity-icon">✎</div><div><b>Notas rápidas</b><small>Última edição neste dispositivo</small></div><span>12 min</span></div>
+            <div class="activity"><div class="activity-icon">✦</div><div><b>NUBYX AI</b><small>Organizar meus arquivos</small></div><span>Ontem</span></div>
+          </div>
+          <div class="bottom-grid">
+            <article class="glass feature"><span>✦</span><div><b>NUBYX AI</b><small>Seu assistente dentro do sistema</small></div><button data-open="ai">Abrir</button></article>
+            <article class="glass feature"><span>◇</span><div><b>NUBYX Vault</b><small>Área protegida para arquivos sensíveis</small></div><button data-open="vault">Abrir</button></article>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
