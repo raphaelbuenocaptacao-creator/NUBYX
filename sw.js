@@ -1,7 +1,13 @@
-const CACHE_NAME='nubyx-v0.6.7-ai-session-bound';
+const CACHE_NAME='nubyx-v0.6.8-safe-shell';
 const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./app.js','./session-guard.js','./sync-client.js','./sync-ui.js','./nubyx-ai.js','./pwa-launch.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 const RUNTIME_CONFIG_RE=/\/config\.js$/i;
+const SENSITIVE_QUERY_RE=/^(token|access_token|refresh_token|password|passwd|secret|session|auth|authorization|api_key|apikey|key)$/i;
+
+function hasSensitiveQuery(url){
+  for(const key of url.searchParams.keys()) if(SENSITIVE_QUERY_RE.test(key)) return true;
+  return false;
+}
 
 function relativeKey(url){
   const scopePath=new URL(self.registration.scope).pathname;
@@ -13,7 +19,7 @@ function relativeKey(url){
 function isAllowedShellRequest(request){
   if(request.method!=='GET'||request.headers.has('authorization')) return false;
   const url=new URL(request.url);
-  if(url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)||RUNTIME_CONFIG_RE.test(url.pathname)) return false;
+  if(url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)||RUNTIME_CONFIG_RE.test(url.pathname)||hasSensitiveQuery(url)||url.search) return false;
   return STATIC_ASSETS.has(relativeKey(url));
 }
 
@@ -37,7 +43,7 @@ self.addEventListener('fetch',event=>{
   }
 
   if(request.mode==='navigate'){
-    if(request.method!=='GET'||url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)) return;
+    if(request.method!=='GET'||url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)||hasSensitiveQuery(url)) return;
     event.respondWith(fetch(request,{cache:'no-store'}).catch(()=>caches.match('./index.html')));
     return;
   }
