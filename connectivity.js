@@ -3,22 +3,28 @@
   let lastOnline = navigator.onLine;
 
   function applyNetworkState(online, { announce = true } = {}) {
-    const status = document.querySelector('#workspaceStatus');
-    const dot = document.querySelector('.cloud-dot');
+    const workspaceStatus = document.querySelector('#workspaceStatus');
+    const cloudStatus = document.querySelector('#cloudStatus');
+    const dots = document.querySelectorAll('.cloud-dot');
 
     document.documentElement.dataset.network = online ? 'online' : 'offline';
 
-    if (status) {
-      status.textContent = online
+    if (workspaceStatus) {
+      workspaceStatus.textContent = online
         ? 'Online · PWA Cloud Workspace'
         : 'Offline · modo local disponível';
-      status.setAttribute('aria-live', 'polite');
+      workspaceStatus.setAttribute('aria-live', 'polite');
     }
 
-    if (dot) {
+    if (cloudStatus) {
+      cloudStatus.textContent = online ? 'Cloud connected' : 'Offline mode';
+      cloudStatus.setAttribute('aria-live', 'polite');
+    }
+
+    dots.forEach(dot => {
       dot.setAttribute('aria-label', online ? 'Conectado' : 'Sem conexão');
       dot.setAttribute('title', online ? 'Conectado' : 'Sem conexão');
-    }
+    });
 
     if (announce && initialized && online !== lastOnline && typeof showToast === 'function') {
       showToast(online
