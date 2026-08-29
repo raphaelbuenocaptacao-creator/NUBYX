@@ -5,6 +5,8 @@
     { label: 'Ver arquivos', hint: 'Pesquisar no NUBYX Drive', action: () => openModule('drive') }
   ];
 
+  let querySequence = 0;
+
   const normalize = (value = '') => String(value)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -15,6 +17,26 @@
     return String(value).replace(/[&<>'"]/g, (char) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
     })[char]);
+  }
+
+  function sessionFingerprint() {
+    try {
+      const profile = typeof currentProfile !== 'undefined' ? currentProfile : null;
+      if (!profile) return 'signed-out';
+      return [profile.mode || 'unknown', profile.id || profile.user_id || profile.email || 'session'].join(':');
+    } catch (_) {
+      return 'unavailable';
+    }
+  }
+
+  function isFreshQuery(sequence, fingerprint) {
+    return sequence === querySequence && fingerprint === sessionFingerprint();
+  }
+
+  function safeOpenModule(target, sequence, fingerprint, delay = 250) {
+    setTimeout(() => {
+      if (isFreshQuery(sequence, fingerprint)) openModule(target);
+    }, delay);
   }
 
   async function getContext() {
@@ -49,19 +71,33 @@
     const query = normalize(rawQuery);
     if (!query) return;
 
+    const sequence = ++querySequence;
+    const fingerprint = sessionFingerprint();
+
     if (query.includes('abrir drive') || query === 'drive') {
       renderAnswer('Abrindo o Drive', 'Vou levar você ao seu espaço privado de arquivos.');
-      setTimeout(() => openModule('drive'), 250);
+      safeOpenModule('drive', sequence, fingerprint);
       return;
     }
 
     if (query.includes('abrir store') || query === 'store' || query.includes('loja')) {
       renderAnswer('Abrindo a Store', 'Vou abrir o catálogo de PWAs e serviços web compatíveis.');
-      setTimeout(() => openModule('store'), 250);
+      safeOpenModule('store', sequence, fingerprint);
       return;
     }
 
-    const { files, apps } = await getContext();
+    let context;
+    try {
+      context = await getContext();
+    } catch (_) {
+      if (isFreshQuery(sequence, fingerprint)) {
+        renderAnswer('Contexto indisponível', 'Não consegui consultar Drive e Store com segurança agora. Sua sessão não foi alterada; tente novamente.');
+      }
+      return;
+    }
+
+    if (!isFreshQuery(sequence, fingerprint)) return;
+    const { files, apps } = context;
 
     if (query.includes('arquivo') || query.includes('pdf') || query.includes('documento') || query.includes('imagem')) {
       const terms = query.split(/\s+/).filter((term) => term.length > 2 && !['arquivo','arquivos','documento','documentos','mostrar','buscar','procure','meus'].includes(term));
@@ -106,6 +142,7 @@
   async function renderNubyxAI() {
     const panel = document.querySelector('#panel');
     if (!panel) return;
+    querySequence += 1;
     panel.innerHTML = `
       <div class="panel-title ai-title"><div><span class="eyebrow">NUBYX AI</span><h3>Comando central do seu ambiente</h3><small>Assistente local seguro · nenhuma ação destrutiva automática</small></div><span class="ai-status">● LOCAL CORE</span></div>
       <div class="ai-shell">
@@ -132,5 +169,6 @@
     button.addEventListener('click', () => setTimeout(renderNubyxAI, 0));
   });
 
+  window.addEventListener('nubyx:session-locked', () => { querySequence += 1; });
   window.NUBYX_AI = { render: renderNubyxAI, run: runQuery };
 })();
