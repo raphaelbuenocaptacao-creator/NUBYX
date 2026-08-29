@@ -2,6 +2,7 @@
   const DEVICE_KEY_STORAGE = 'nubyx_device_key';
   const HEARTBEAT_MS = 60_000;
   const BOOT_POLL_MS = 2_000;
+  const REPLAY_LIMIT = 500;
   const ALLOWED_CHANNELS = new Set(['workspace','apps','files','profile','settings']);
   const ALLOWED_EVENT_TYPES = new Set(['upsert','delete']);
   let activeUserId = null;
@@ -9,6 +10,8 @@
   let channel = null;
   let heartbeatTimer = null;
   let schemaBlocked = false;
+  let replayRunning = false;
+  const cursors = new Map();
 
   function getDeviceKey(){
     let key = localStorage.getItem(DEVICE_KEY_STORAGE);
@@ -39,7 +42,10 @@
   function isSchemaMissing(error){
     const code = String(error?.code || '');
     const message = String(error?.message || '').toLowerCase();
-    return code === '42P01' || code === 'PGRST205' || message.includes('user_devices') && message.includes('not found') || message.includes('sync_events') && message.includes('not found');
+    return code === '42P01' || code === 'PGRST205' ||
+      message.includes('user_devices') && message.includes('not found') ||
+      message.includes('sync_events') && message.includes('not found') ||
+      message.includes('sync_cursors') && message.includes('not found');
   }
 
   function normalizePayload(payload){
@@ -89,6 +95,112 @@
     activeDeviceId = data.id;
     setSyncUi('Conectada', 'dispositivo registrado');
     return data;
+  }
+
+  async function loadCursors(){
+    if(!activeUserId || !activeDeviceId || !supabaseClient) return false;
+    const { data, error } = await supabaseClient
+      .from('sync_cursors')
+      .select('channel,last_event_id')
+      .eq('user_id', activeUserId)
+      .eq('device_id', activeDeviceId);
+
+    if(error){
+      console.warn('NUBYX Continuity cursor load failed', error);
+      if(isSchemaMissing(error)){
+        schemaBlocked = true;
+        setSyncUi('Pendente', 'migration 004 não aplicada');
+      } else {
+        setSyncUi('Limitada', 'checkpoints indisponíveis');
+      }
+      return false;
+    }
+
+    cursors.clear();
+    for(const name of ALLOWED_CHANNELS) cursors.set(name, 0);
+    for(const row of data || []){
+      if(ALLOWED_CHANNELS.has(row.channel)) cursors.set(row.channel, Number(row.last_event_id) || 0);
+    }
+    return true;
+  }
+
+  async function persistCursor(channelName, eventId){
+    const next = Number(eventId) || 0;
+    const current = cursors.get(channelName) || 0;
+    if(!next || next <= current || !activeUserId || !activeDeviceId) return;
+
+    cursors.set(channelName, next);
+    const { error } = await supabaseClient
+      .from('sync_cursors')
+      .upsert({
+        user_id: activeUserId,
+        device_id: activeDeviceId,
+        channel: channelName,
+        last_event_id: next,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'device_id,channel' });
+
+    if(error){
+      console.warn('NUBYX Continuity cursor persist failed', error);
+      if(isSchemaMissing(error)){
+        schemaBlocked = true;
+        setSyncUi('Pendente', 'migration 004 não aplicada');
+      }
+    }
+  }
+
+  async function processEvent(event, source = 'realtime'){
+    if(!event || event.user_id !== activeUserId || !ALLOWED_CHANNELS.has(event.channel)) return;
+    const eventId = Number(event.id) || 0;
+    if(!eventId || eventId <= (cursors.get(event.channel) || 0)) return;
+
+    if(event.device_id !== activeDeviceId){
+      window.dispatchEvent(new CustomEvent('nubyx:sync-event', { detail: { ...event, source } }));
+    }
+    await persistCursor(event.channel, eventId);
+  }
+
+  async function replayMissedEvents(){
+    if(replayRunning || schemaBlocked || !activeUserId || !activeDeviceId || !supabaseClient) return;
+    replayRunning = true;
+    try {
+      let replayed = 0;
+      for(const channelName of ALLOWED_CHANNELS){
+        let hasMore = true;
+        while(hasMore && !schemaBlocked){
+          const afterId = cursors.get(channelName) || 0;
+          const { data, error } = await supabaseClient
+            .from('sync_events')
+            .select('id,user_id,device_id,channel,entity_key,event_type,version,payload,created_at')
+            .eq('user_id', activeUserId)
+            .eq('channel', channelName)
+            .gt('id', afterId)
+            .order('id', { ascending: true })
+            .limit(REPLAY_LIMIT);
+
+          if(error){
+            console.warn('NUBYX Continuity replay failed', error);
+            if(isSchemaMissing(error)){
+              schemaBlocked = true;
+              setSyncUi('Pendente', 'migration 002/004 não aplicada');
+            } else {
+              setSyncUi('Limitada', 'histórico não pôde ser retomado');
+            }
+            return;
+          }
+
+          const rows = data || [];
+          for(const event of rows){
+            await processEvent(event, 'replay');
+            replayed += 1;
+          }
+          hasMore = rows.length === REPLAY_LIMIT;
+        }
+      }
+      setSyncUi('Sincronizada', replayed ? `${replayed} eventos recuperados` : 'continuidade em dia');
+    } finally {
+      replayRunning = false;
+    }
   }
 
   async function heartbeat(){
@@ -142,6 +254,7 @@
       return { ok: false, reason: 'publish_failed', error };
     }
 
+    await persistCursor(channelName, data.id);
     setSyncUi('Sincronizada', `${channelName} atualizado`);
     window.dispatchEvent(new CustomEvent('nubyx:sync-published', { detail: { ...event, ...data } }));
     return { ok: true, event: { ...event, ...data } };
@@ -158,12 +271,13 @@
         filter: `user_id=eq.${activeUserId}`
       }, payload => {
         const event = payload?.new;
-        if(!event || event.device_id === activeDeviceId) return;
-        window.dispatchEvent(new CustomEvent('nubyx:sync-event', { detail: event }));
-        setSyncUi('Atualizada', `evento ${event.channel || 'workspace'} recebido`);
+        processEvent(event, 'realtime').catch(error => console.warn('NUBYX Continuity realtime processing failed', error));
       })
       .subscribe(status => {
-        if(status === 'SUBSCRIBED') setSyncUi('Conectada', 'Realtime protegido por NUBYX ID');
+        if(status === 'SUBSCRIBED'){
+          setSyncUi('Conectada', 'Realtime protegido por NUBYX ID');
+          replayMissedEvents().catch(error => console.warn('NUBYX Continuity replay bootstrap failed', error));
+        }
       });
   }
 
@@ -175,6 +289,8 @@
     channel = null;
     activeUserId = null;
     activeDeviceId = null;
+    replayRunning = false;
+    cursors.clear();
   }
 
   async function boot(){
@@ -187,12 +303,16 @@
     setSyncUi('Conectando', 'registrando este dispositivo');
     const registered = await registerDevice();
     if(!registered) return;
+    const cursorReady = await loadCursors();
+    if(!cursorReady) return;
     await subscribe();
     heartbeatTimer = setInterval(heartbeat, HEARTBEAT_MS);
   }
 
   setInterval(boot, BOOT_POLL_MS);
-  window.addEventListener('online', boot);
+  window.addEventListener('online', () => {
+    boot().then(() => replayMissedEvents()).catch(error => console.warn('NUBYX Continuity reconnect failed', error));
+  });
   window.addEventListener('offline', () => {
     if(currentProfile?.mode === 'supabase') setSyncUi('Offline', 'alterações aguardam conexão');
   });
@@ -201,7 +321,8 @@
     get deviceId(){ return activeDeviceId; },
     get userId(){ return activeUserId; },
     get ready(){ return Boolean(activeUserId && activeDeviceId && !schemaBlocked); },
-    refresh: boot,
+    get checkpoints(){ return Object.fromEntries(cursors); },
+    refresh: async () => { await boot(); await replayMissedEvents(); },
     publish
   };
 })();
