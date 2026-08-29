@@ -48,6 +48,27 @@
       message.includes('sync_cursors') && message.includes('not found');
   }
 
+  function isClientEventKeyMissing(error){
+    const code = String(error?.code || '');
+    const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+    return code === 'PGRST204' && message.includes('client_event_key') ||
+      message.includes('client_event_key') && (message.includes('schema cache') || message.includes('column'));
+  }
+
+  function isIdempotencyConflict(error){
+    if(String(error?.code || '') !== '23505') return false;
+    const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+    return message.includes('sync_events_user_device_client_key_uidx') || message.includes('client_event_key');
+  }
+
+  function normalizeClientEventKey(value){
+    const key = String(value || crypto.randomUUID()).trim().toLowerCase();
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key)){
+      throw new TypeError('NUBYX sync client event key must be a valid UUID.');
+    }
+    return key;
+  }
+
   function normalizePayload(payload){
     if(payload == null) return {};
     if(typeof payload !== 'object' || Array.isArray(payload)) throw new TypeError('NUBYX sync payload must be a JSON object.');
@@ -213,19 +234,33 @@
     if(error) console.warn('NUBYX Continuity heartbeat failed', error);
   }
 
-  async function publish(channelName, entityKey, eventType = 'upsert', payload = {}){
+  async function findPublishedEvent(clientEventKey){
+    const { data, error } = await supabaseClient
+      .from('sync_events')
+      .select('id,created_at')
+      .eq('user_id', activeUserId)
+      .eq('device_id', activeDeviceId)
+      .eq('client_event_key', clientEventKey)
+      .limit(1)
+      .single();
+    if(error) return null;
+    return data;
+  }
+
+  async function publish(channelName, entityKey, eventType = 'upsert', payload = {}, options = {}){
     const key = validateEvent(channelName, entityKey, eventType);
     const safePayload = normalizePayload(payload);
+    const clientEventKey = normalizeClientEventKey(options?.clientEventKey);
 
-    if(schemaBlocked) return { ok: false, reason: 'schema_missing' };
+    if(schemaBlocked) return { ok: false, reason: 'schema_missing', clientEventKey };
     if(currentProfile?.mode !== 'supabase' || !supabaseClient || !currentProfile?.userId){
-      return { ok: false, reason: 'not_authenticated' };
+      return { ok: false, reason: 'not_authenticated', clientEventKey };
     }
 
     if(activeUserId !== currentProfile.userId || !activeDeviceId){
       await boot();
     }
-    if(!activeDeviceId) return { ok: false, reason: schemaBlocked ? 'schema_missing' : 'device_unavailable' };
+    if(!activeDeviceId) return { ok: false, reason: schemaBlocked ? 'schema_missing' : 'device_unavailable', clientEventKey };
 
     const event = {
       user_id: currentProfile.userId,
@@ -234,30 +269,51 @@
       entity_key: key,
       event_type: eventType,
       version: Date.now(),
-      payload: safePayload
+      payload: safePayload,
+      client_event_key: clientEventKey
     };
 
-    const { data, error } = await supabaseClient
+    let result = await supabaseClient
       .from('sync_events')
       .insert(event)
       .select('id,created_at')
       .single();
 
-    if(error){
-      console.warn('NUBYX Continuity publish failed', error);
-      if(isSchemaMissing(error)){
-        schemaBlocked = true;
-        setSyncUi('Pendente', 'migration 002 não aplicada');
-        return { ok: false, reason: 'schema_missing', error };
-      }
-      setSyncUi('Limitada', 'evento não sincronizado');
-      return { ok: false, reason: 'publish_failed', error };
+    if(result.error && isClientEventKeyMissing(result.error)){
+      const legacyEvent = { ...event };
+      delete legacyEvent.client_event_key;
+      setSyncUi('Compatível', 'migration 009 ainda não aplicada');
+      result = await supabaseClient
+        .from('sync_events')
+        .insert(legacyEvent)
+        .select('id,created_at')
+        .single();
     }
 
-    await persistCursor(channelName, data.id);
+    if(result.error && isIdempotencyConflict(result.error)){
+      const existing = await findPublishedEvent(clientEventKey);
+      if(existing){
+        await persistCursor(channelName, existing.id);
+        setSyncUi('Sincronizada', `${channelName} já confirmado`);
+        return { ok: true, deduplicated: true, clientEventKey, event: { ...event, ...existing } };
+      }
+    }
+
+    if(result.error){
+      console.warn('NUBYX Continuity publish failed', result.error);
+      if(isSchemaMissing(result.error)){
+        schemaBlocked = true;
+        setSyncUi('Pendente', 'migration 002 não aplicada');
+        return { ok: false, reason: 'schema_missing', error: result.error, clientEventKey };
+      }
+      setSyncUi('Limitada', 'evento não sincronizado');
+      return { ok: false, reason: 'publish_failed', error: result.error, clientEventKey };
+    }
+
+    await persistCursor(channelName, result.data.id);
     setSyncUi('Sincronizada', `${channelName} atualizado`);
-    window.dispatchEvent(new CustomEvent('nubyx:sync-published', { detail: { ...event, ...data } }));
-    return { ok: true, event: { ...event, ...data } };
+    window.dispatchEvent(new CustomEvent('nubyx:sync-published', { detail: { ...event, ...result.data } }));
+    return { ok: true, clientEventKey, event: { ...event, ...result.data } };
   }
 
   async function subscribe(){
@@ -322,6 +378,7 @@
     get userId(){ return activeUserId; },
     get ready(){ return Boolean(activeUserId && activeDeviceId && !schemaBlocked); },
     get checkpoints(){ return Object.fromEntries(cursors); },
+    createEventKey: () => crypto.randomUUID(),
     refresh: async () => { await boot(); await replayMissedEvents(); },
     publish
   };
