@@ -1,4 +1,4 @@
-const CACHE_NAME='nubyx-v0.6.6-session-guard';
+const CACHE_NAME='nubyx-v0.6.7-ai-session-bound';
 const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./app.js','./session-guard.js','./sync-client.js','./sync-ui.js','./nubyx-ai.js','./pwa-launch.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 const RUNTIME_CONFIG_RE=/\/config\.js$/i;
