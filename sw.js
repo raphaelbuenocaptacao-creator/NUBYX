@@ -1,4 +1,4 @@
-const CACHE_NAME='nubyx-v0.6.8-safe-shell';
+const CACHE_NAME='nubyx-v0.6.9-nav-preload';
 const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./app.js','./session-guard.js','./sync-client.js','./sync-ui.js','./nubyx-ai.js','./pwa-launch.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 const RUNTIME_CONFIG_RE=/\/config\.js$/i;
@@ -29,8 +29,11 @@ self.addEventListener('install',event=>{
 });
 
 self.addEventListener('activate',event=>{
-  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE_NAME).map(key=>caches.delete(key)))));
-  self.clients.claim();
+  event.waitUntil((async()=>{
+    await Promise.all((await caches.keys()).filter(key=>key!==CACHE_NAME).map(key=>caches.delete(key)));
+    if(self.registration.navigationPreload) await self.registration.navigationPreload.enable();
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch',event=>{
@@ -44,7 +47,15 @@ self.addEventListener('fetch',event=>{
 
   if(request.mode==='navigate'){
     if(request.method!=='GET'||url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)||hasSensitiveQuery(url)) return;
-    event.respondWith(fetch(request,{cache:'no-store'}).catch(()=>caches.match('./index.html')));
+    event.respondWith((async()=>{
+      try{
+        const preload=await event.preloadResponse;
+        if(preload) return preload;
+        return await fetch(request,{cache:'no-store'});
+      }catch{
+        return caches.match('./index.html');
+      }
+    })());
     return;
   }
 
