@@ -66,6 +66,22 @@ function setDemoApps(apps){
   localStorage.setItem('nubyx_demo_apps', JSON.stringify(apps));
 }
 
+async function publishStoreSync(app, eventType){
+  if(currentProfile?.mode !== 'supabase') return;
+  const continuity = window.NUBYX_CONTINUITY;
+  if(!continuity?.publish) return;
+  const payload = eventType === 'delete' ? {} : {
+    app_key: app.key,
+    app_name: app.name,
+    app_url: app.url,
+    icon: app.icon
+  };
+  const result = await continuity.publish('apps', app.key, eventType, payload);
+  if(!result?.ok && result?.reason !== 'schema_missing'){
+    console.warn('NUBYX Store change saved, but Continuity event was not published.', result);
+  }
+}
+
 async function listInstalledApps(){
   if(currentProfile?.mode === 'supabase' && supabaseClient){
     const { data, error } = await supabaseClient
@@ -92,6 +108,7 @@ async function installApp(app){
       position: installed.length
     });
     if(error){ console.error(error); return showToast('Falha ao instalar app.'); }
+    await publishStoreSync(app, 'upsert');
   } else {
     const installed = getDemoApps();
     if(installed.some(item=>item.app_key===app.key)) return showToast(`${app.name} já está instalado.`);
@@ -105,9 +122,11 @@ async function installApp(app){
 
 async function uninstallApp(appKey){
   if(!currentProfile) return;
+  const app = STORE_CATALOG.find(item=>item.key===appKey) || {key: appKey};
   if(currentProfile.mode === 'supabase' && supabaseClient){
     const { error } = await supabaseClient.from('user_apps').delete().eq('app_key', appKey);
     if(error){ console.error(error); return showToast('Falha ao remover app.'); }
+    await publishStoreSync(app, 'delete');
   } else {
     setDemoApps(getDemoApps().filter(item=>item.app_key!==appKey));
   }
