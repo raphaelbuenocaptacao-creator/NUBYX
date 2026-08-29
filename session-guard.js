@@ -5,6 +5,11 @@
   function lockCloudShell(reason = 'Sessão encerrada') {
     if (typeof currentProfile === 'undefined' || currentProfile?.mode !== 'supabase') return;
 
+    const endedUserId = currentProfile?.userId || null;
+    window.dispatchEvent(new CustomEvent('nubyx:session-ended', {
+      detail: { userId: endedUserId, reason }
+    }));
+
     currentProfile = null;
     localStorage.removeItem('nubyx_demo_session');
 
