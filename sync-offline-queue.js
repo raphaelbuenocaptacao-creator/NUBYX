@@ -56,6 +56,16 @@
     await withStore('readwrite', store => store.delete(id));
   }
 
+  async function purgeUser(userId){
+    if(!userId) return 0;
+    const rows = await listForUser(userId);
+    for(const row of rows) await remove(row.id);
+    if(rows.length){
+      window.dispatchEvent(new CustomEvent('nubyx:sync-queue-purged', { detail: { count: rows.length } }));
+    }
+    return rows.length;
+  }
+
   async function prune(userId){
     const now = Date.now();
     const rows = await listForUser(userId);
@@ -153,4 +163,8 @@
   window.addEventListener('online', () => setTimeout(flush, 400));
   window.addEventListener('nubyx:sync-published', flush);
   window.addEventListener('nubyx:sync-flush-request', flush);
+  window.addEventListener('nubyx:session-ended', event => {
+    const userId = event?.detail?.userId || null;
+    purgeUser(userId).catch(error => console.warn('NUBYX Continuity queue purge failed', error));
+  });
 })();
