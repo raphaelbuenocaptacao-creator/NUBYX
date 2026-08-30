@@ -66,6 +66,36 @@
     return rows.length;
   }
 
+  async function purgeForeignUsers(activeUserId){
+    if(!activeUserId) return 0;
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.openCursor();
+      let removed = 0;
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if(!cursor) return;
+        if(cursor.value?.user_id !== activeUserId){
+          cursor.delete();
+          removed += 1;
+        }
+        cursor.continue();
+      };
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => {
+        db.close();
+        if(removed){
+          window.dispatchEvent(new CustomEvent('nubyx:sync-queue-purged', { detail: { count: removed, reason: 'foreign_user' } }));
+        }
+        resolve(removed);
+      };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+      tx.onabort = () => { db.close(); reject(tx.error || new Error('NUBYX outbox purge aborted')); };
+    });
+  }
+
   async function prune(userId){
     const now = Date.now();
     const rows = await listForUser(userId);
@@ -76,6 +106,7 @@
   }
 
   async function enqueue(userId, channelName, entityKey, eventType, payload, clientEventKey){
+    await purgeForeignUsers(userId);
     await prune(userId);
     await withStore('readwrite', store => store.add({
       user_id: userId,
@@ -96,6 +127,7 @@
     if(flushing || !navigator.onLine || !userId || !continuity?.ready || typeof continuity.__publishOnline !== 'function') return;
     flushing = true;
     try {
+      await purgeForeignUsers(userId);
       await prune(userId);
       const rows = await listForUser(userId);
       let sent = 0;
