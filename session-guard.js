@@ -1,7 +1,12 @@
 (() => {
   const WATCH_MS = 500;
+  const IDLE_CHECK_MS = 30 * 1000;
+  const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+  const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'scroll'];
   let subscribed = false;
   let surfacesWrapped = false;
+  let lastActivityAt = Date.now();
+  let idleLockInProgress = false;
 
   function sessionKey() {
     if (typeof currentProfile === 'undefined' || !currentProfile) return 'none';
@@ -45,27 +50,74 @@
     surfacesWrapped = true;
   }
 
-  function lockCloudShell(reason = 'Sessão encerrada') {
-    if (typeof currentProfile === 'undefined' || currentProfile?.mode !== 'supabase') return;
-
-    const endedUserId = currentProfile?.userId || null;
-    window.dispatchEvent(new CustomEvent('nubyx:session-ended', {
-      detail: { userId: endedUserId, reason }
-    }));
-
-    currentProfile = null;
-    localStorage.removeItem('nubyx_demo_session');
-    scrubPrivateWorkspace();
-
+  function showAuthShell(message) {
     const osShell = document.querySelector('#os');
     const authShell = document.querySelector('#auth');
     if (osShell) osShell.classList.add('hidden');
     if (authShell) authShell.classList.remove('hidden');
 
     const status = document.querySelector('#authStatus');
-    if (status) status.textContent = 'Sua sessão NUBYX ID terminou. Entre novamente para acessar seus dados.';
+    if (status) status.textContent = message;
+  }
+
+  function dispatchSessionEnded(userId, reason) {
+    window.dispatchEvent(new CustomEvent('nubyx:session-ended', {
+      detail: { userId: userId || null, reason }
+    }));
+  }
+
+  function lockCloudShell(reason = 'Sessão encerrada') {
+    if (typeof currentProfile === 'undefined' || currentProfile?.mode !== 'supabase') return;
+
+    const endedUserId = currentProfile?.userId || null;
+    dispatchSessionEnded(endedUserId, reason);
+
+    currentProfile = null;
+    localStorage.removeItem('nubyx_demo_session');
+    scrubPrivateWorkspace();
+    showAuthShell('Sua sessão NUBYX ID terminou. Entre novamente para acessar seus dados.');
 
     if (typeof showToast === 'function') showToast(reason);
+  }
+
+  async function lockInactiveSession() {
+    if (idleLockInProgress || typeof currentProfile === 'undefined' || !currentProfile) return;
+    idleLockInProgress = true;
+
+    const profile = currentProfile;
+    const reason = 'NUBYX bloqueado por inatividade';
+
+    if (profile.mode === 'supabase') {
+      lockCloudShell(reason);
+      try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient?.auth?.signOut) {
+          await supabaseClient.auth.signOut({ scope: 'local' });
+        }
+      } catch (error) {
+        console.warn('NUBYX idle sign-out could not reach the auth provider.', error);
+      }
+    } else {
+      dispatchSessionEnded(profile.userId || null, reason);
+      localStorage.removeItem('nubyx_demo_session');
+      currentProfile = null;
+      scrubPrivateWorkspace();
+      showAuthShell('Ambiente bloqueado após 30 minutos sem atividade. Entre novamente para continuar.');
+      if (typeof showToast === 'function') showToast(reason);
+    }
+
+    idleLockInProgress = false;
+  }
+
+  function noteActivity() {
+    if (typeof currentProfile !== 'undefined' && currentProfile) lastActivityAt = Date.now();
+  }
+
+  function checkIdleSession() {
+    if (typeof currentProfile === 'undefined' || !currentProfile) {
+      lastActivityAt = Date.now();
+      return;
+    }
+    if (Date.now() - lastActivityAt >= IDLE_TIMEOUT_MS) lockInactiveSession();
   }
 
   function attachGuard() {
@@ -74,12 +126,21 @@
     subscribed = true;
 
     supabaseClient.auth.onAuthStateChange((event, session) => {
-      if (session?.user) return;
+      if (session?.user) {
+        lastActivityAt = Date.now();
+        return;
+      }
       if (event === 'SIGNED_OUT' || currentProfile?.mode === 'supabase') {
         lockCloudShell(event === 'SIGNED_OUT' ? 'NUBYX ID desconectado' : 'Sessão NUBYX ID expirada');
       }
     });
   }
+
+  ACTIVITY_EVENTS.forEach((eventName) => window.addEventListener(eventName, noteActivity, { passive: true }));
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkIdleSession();
+  });
+  setInterval(checkIdleSession, IDLE_CHECK_MS);
 
   const watcher = setInterval(() => {
     attachGuard();
@@ -87,5 +148,10 @@
   }, WATCH_MS);
 
   attachGuard();
-  window.NUBYX_SESSION_GUARD = { lock: lockCloudShell, scrub: scrubPrivateWorkspace };
+  window.NUBYX_SESSION_GUARD = {
+    lock: lockCloudShell,
+    lockInactive: lockInactiveSession,
+    scrub: scrubPrivateWorkspace,
+    idleTimeoutMs: IDLE_TIMEOUT_MS
+  };
 })();
