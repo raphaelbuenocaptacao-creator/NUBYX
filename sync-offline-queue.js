@@ -109,20 +109,35 @@
     for(const row of [...expired, ...overflow]) await remove(row.id);
   }
 
-  async function enqueue(userId, channelName, entityKey, eventType, payload, clientEventKey){
+  function sessionStillMatches(userId, generation){
+    return generation === sessionGeneration && currentUserId() === userId;
+  }
+
+  async function enqueue(userId, channelName, entityKey, eventType, payload, clientEventKey, generation){
+    if(!sessionStillMatches(userId, generation)) return false;
     await purgeForeignUsers(userId);
+    if(!sessionStillMatches(userId, generation)) return false;
     await prune(userId);
-    await withStore('readwrite', store => store.add({
-      user_id: userId,
-      channel: channelName,
-      entity_key: entityKey,
-      event_type: eventType,
-      payload,
-      client_event_key: clientEventKey,
-      created_at: Date.now()
-    }));
+    if(!sessionStillMatches(userId, generation)) return false;
+    await withStore('readwrite', store => {
+      if(!sessionStillMatches(userId, generation)) return;
+      store.add({
+        user_id: userId,
+        channel: channelName,
+        entity_key: entityKey,
+        event_type: eventType,
+        payload,
+        client_event_key: clientEventKey,
+        created_at: Date.now()
+      });
+    });
+    if(!sessionStillMatches(userId, generation)){
+      await purgeUser(userId);
+      return false;
+    }
     await prune(userId);
     window.dispatchEvent(new CustomEvent('nubyx:sync-queued', { detail: { channel: channelName, entityKey } }));
+    return true;
   }
 
   async function flush(){
@@ -174,18 +189,23 @@
 
     continuity.publish = async (channelName, entityKey, eventType = 'upsert', payload = {}, options = {}) => {
       const userId = currentUserId();
+      const generation = sessionGeneration;
       const clientEventKey = options?.clientEventKey || continuity.createEventKey();
       if(!userId) return publishOnline(channelName, entityKey, eventType, payload, { ...options, clientEventKey });
 
       if(!navigator.onLine){
-        await enqueue(userId, channelName, entityKey, eventType, payload, clientEventKey);
-        return { ok: true, queued: true, reason: 'offline', clientEventKey };
+        const queued = await enqueue(userId, channelName, entityKey, eventType, payload, clientEventKey, generation);
+        return queued
+          ? { ok: true, queued: true, reason: 'offline', clientEventKey }
+          : { ok: false, queued: false, reason: 'session_changed', clientEventKey };
       }
 
       const result = await publishOnline(channelName, entityKey, eventType, payload, { ...options, clientEventKey });
       if(!result?.ok && result?.reason === 'publish_failed' && !navigator.onLine){
-        await enqueue(userId, channelName, entityKey, eventType, payload, clientEventKey);
-        return { ok: true, queued: true, reason: 'offline', clientEventKey };
+        const queued = await enqueue(userId, channelName, entityKey, eventType, payload, clientEventKey, generation);
+        return queued
+          ? { ok: true, queued: true, reason: 'offline', clientEventKey }
+          : { ok: false, queued: false, reason: 'session_changed', clientEventKey };
       }
       return result;
     };
