@@ -11,7 +11,7 @@
   }
 
   async function refreshLauncher() {
-    const grid = document.querySelector('#appGrid');
+    const grid = document.querySelector('#launcherGrid');
     if (!grid || typeof listInstalledApps !== 'function') return;
 
     grid.querySelectorAll('[data-installed-app]').forEach(node => node.remove());
@@ -29,15 +29,15 @@
       if (!url) return;
 
       const button = document.createElement('button');
-      button.className = 'app installed-app';
+      button.className = 'installed-app';
       button.dataset.installedApp = app.app_key || 'web-app';
       button.type = 'button';
       button.setAttribute('aria-label', `Abrir ${app.app_name || 'aplicativo'}`);
 
-      const icon = document.createElement('i');
+      const icon = document.createElement('span');
       icon.textContent = String(app.icon || '◎').slice(0, 4);
 
-      const label = document.createElement('span');
+      const label = document.createElement('small');
       label.textContent = String(app.app_name || 'App').slice(0, 40);
 
       button.append(icon, label);
