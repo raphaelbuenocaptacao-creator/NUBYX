@@ -1,5 +1,5 @@
-const CACHE_NAME='nubyx-v0.8.7-demo-privacy';
-const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./home-2050.css','./auth-2050.css','./app.js','./identity-runtime.js','./store-session-guard.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./logout-privacy-guard.js','./pwa-launch.js','./pwa-update.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
+const CACHE_NAME='nubyx-v0.8.8-auth-revocation';
+const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./home-2050.css','./auth-2050.css','./app.js','./identity-runtime.js','./auth-revocation-guard.js','./store-session-guard.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./logout-privacy-guard.js','./pwa-launch.js','./pwa-update.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 const RUNTIME_CONFIG_RE=/\/config\.js$/i;
 const SENSITIVE_QUERY_RE=/^(token|access_token|refresh_token|password|passwd|secret|session|auth|authorization|api_key|apikey|key|code|credential|credentials)$/i;
