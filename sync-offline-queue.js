@@ -6,9 +6,12 @@
   const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   let flushing = false;
   let sessionGeneration = 0;
+  let lastKnownUserId = null;
 
   function currentUserId(){
-    return currentProfile?.mode === 'supabase' ? currentProfile?.userId || null : null;
+    const userId = currentProfile?.mode === 'supabase' ? currentProfile?.userId || null : null;
+    if(userId) lastKnownUserId = userId;
+    return userId;
   }
 
   function openDb(){
@@ -201,7 +204,8 @@
   window.addEventListener('nubyx:sync-flush-request', flush);
   window.addEventListener('nubyx:session-ended', event => {
     sessionGeneration += 1;
-    const userId = event?.detail?.userId || null;
+    const userId = event?.detail?.userId || lastKnownUserId || null;
+    lastKnownUserId = null;
     purgeUser(userId).catch(error => console.warn('NUBYX Continuity queue purge failed', error));
   });
 })();
