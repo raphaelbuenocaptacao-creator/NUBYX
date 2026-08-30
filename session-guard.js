@@ -1,6 +1,12 @@
 (() => {
   const WATCH_MS = 500;
   let subscribed = false;
+  let surfacesWrapped = false;
+
+  function sessionKey() {
+    if (typeof currentProfile === 'undefined' || !currentProfile) return 'none';
+    return `${currentProfile.mode || 'unknown'}:${currentProfile.userId || currentProfile.email || 'anonymous'}`;
+  }
 
   function scrubPrivateWorkspace() {
     const panel = document.querySelector('#panel');
@@ -13,6 +19,30 @@
     if (installedCount) installedCount.textContent = '—';
 
     document.querySelectorAll('[data-user-scoped], [data-drive-open], [data-drive-delete], [data-store-key]').forEach((node) => node.remove());
+  }
+
+  function wrapPrivateSurfaces() {
+    if (surfacesWrapped) return;
+    if (typeof renderDrive !== 'function' || typeof renderStore !== 'function') return;
+
+    const originalRenderDrive = renderDrive;
+    const originalRenderStore = renderStore;
+
+    renderDrive = async function guardedRenderDrive(...args) {
+      const startedFor = sessionKey();
+      const result = await originalRenderDrive.apply(this, args);
+      if (startedFor !== sessionKey()) scrubPrivateWorkspace();
+      return result;
+    };
+
+    renderStore = async function guardedRenderStore(...args) {
+      const startedFor = sessionKey();
+      const result = await originalRenderStore.apply(this, args);
+      if (startedFor !== sessionKey()) scrubPrivateWorkspace();
+      return result;
+    };
+
+    surfacesWrapped = true;
   }
 
   function lockCloudShell(reason = 'Sessão encerrada') {
@@ -39,6 +69,7 @@
   }
 
   function attachGuard() {
+    wrapPrivateSurfaces();
     if (subscribed || typeof supabaseClient === 'undefined' || !supabaseClient?.auth?.onAuthStateChange) return;
     subscribed = true;
 
@@ -52,7 +83,7 @@
 
   const watcher = setInterval(() => {
     attachGuard();
-    if (subscribed) clearInterval(watcher);
+    if (subscribed && surfacesWrapped) clearInterval(watcher);
   }, WATCH_MS);
 
   attachGuard();
