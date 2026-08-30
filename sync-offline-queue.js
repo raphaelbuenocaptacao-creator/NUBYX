@@ -5,6 +5,7 @@
   const MAX_QUEUE_PER_USER = 100;
   const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   let flushing = false;
+  let sessionGeneration = 0;
 
   function currentUserId(){
     return currentProfile?.mode === 'supabase' ? currentProfile?.userId || null : null;
@@ -124,15 +125,17 @@
   async function flush(){
     const continuity = window.NUBYX_CONTINUITY;
     const userId = currentUserId();
+    const generation = sessionGeneration;
     if(flushing || !navigator.onLine || !userId || !continuity?.ready || typeof continuity.__publishOnline !== 'function') return;
     flushing = true;
     try {
       await purgeForeignUsers(userId);
+      if(generation !== sessionGeneration || currentUserId() !== userId) return;
       await prune(userId);
       const rows = await listForUser(userId);
       let sent = 0;
       for(const row of rows){
-        if(currentUserId() !== userId || !navigator.onLine) break;
+        if(generation !== sessionGeneration || currentUserId() !== userId || !navigator.onLine) break;
         const result = await continuity.__publishOnline(
           row.channel,
           row.entity_key,
@@ -140,6 +143,7 @@
           row.payload,
           { clientEventKey: row.client_event_key }
         );
+        if(generation !== sessionGeneration || currentUserId() !== userId) break;
         if(result?.ok){
           await remove(row.id);
           sent += 1;
@@ -148,7 +152,7 @@
         if(['schema_missing','not_authenticated','device_unavailable'].includes(result?.reason)) break;
         break;
       }
-      if(sent){
+      if(sent && generation === sessionGeneration && currentUserId() === userId){
         window.dispatchEvent(new CustomEvent('nubyx:sync-flushed', { detail: { count: sent } }));
       }
     } catch(error){
@@ -196,6 +200,7 @@
   window.addEventListener('nubyx:sync-published', flush);
   window.addEventListener('nubyx:sync-flush-request', flush);
   window.addEventListener('nubyx:session-ended', event => {
+    sessionGeneration += 1;
     const userId = event?.detail?.userId || null;
     purgeUser(userId).catch(error => console.warn('NUBYX Continuity queue purge failed', error));
   });
