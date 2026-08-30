@@ -23,7 +23,7 @@
     try {
       const profile = typeof currentProfile !== 'undefined' ? currentProfile : null;
       if (!profile) return 'signed-out';
-      return [profile.mode || 'unknown', profile.id || profile.user_id || profile.email || 'session'].join(':');
+      return [profile.mode || 'unknown', profile.userId || profile.id || profile.user_id || profile.email || 'session'].join(':');
     } catch (_) {
       return 'unavailable';
     }
@@ -65,6 +65,16 @@
         if (target === 'store') openModule('store');
       });
     });
+  }
+
+  function clearSessionScopedAI() {
+    querySequence += 1;
+    const input = document.querySelector('#aiInput');
+    if (input) input.value = '';
+    const answer = document.querySelector('#aiAnswer');
+    if (answer) {
+      answer.innerHTML = '<div class="ai-answer-head"><span>✦</span><div><b>NUBYX AI bloqueada</b><small>NUBYX ID · sessão encerrada</small></div></div><p>O contexto da sessão anterior foi removido deste painel. Entre novamente para consultar seus dados.</p>';
+    }
   }
 
   async function runQuery(rawQuery) {
@@ -169,6 +179,7 @@
     button.addEventListener('click', () => setTimeout(renderNubyxAI, 0));
   });
 
-  window.addEventListener('nubyx:session-locked', () => { querySequence += 1; });
+  window.addEventListener('nubyx:session-ended', clearSessionScopedAI);
+  window.addEventListener('nubyx:session-locked', clearSessionScopedAI);
   window.NUBYX_AI = { render: renderNubyxAI, run: runQuery };
 })();
