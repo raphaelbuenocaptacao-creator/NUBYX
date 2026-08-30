@@ -1,6 +1,4 @@
 (() => {
-  const CORE_APP_COUNT = 8;
-
   function safeHttpsUrl(value) {
     try {
       const url = new URL(value);
@@ -15,6 +13,7 @@
     if (!grid || typeof listInstalledApps !== 'function') return;
 
     grid.querySelectorAll('[data-installed-app]').forEach(node => node.remove());
+    const coreAppCount = grid.querySelectorAll(':scope > button:not([data-installed-app])').length;
 
     let installed = [];
     try {
@@ -24,6 +23,7 @@
       return;
     }
 
+    let renderedInstalledCount = 0;
     installed.forEach(app => {
       const url = safeHttpsUrl(app.app_url);
       if (!url) return;
@@ -48,10 +48,15 @@
         }
       });
       grid.appendChild(button);
+      renderedInstalledCount += 1;
     });
 
+    const total = coreAppCount + renderedInstalledCount;
     const count = document.querySelector('#installedCount');
-    if (count) count.textContent = String(CORE_APP_COUNT + installed.length);
+    if (count) count.textContent = `${total} app${total === 1 ? '' : 's'}`;
+
+    const metric = document.querySelector('#appsMetric');
+    if (metric) metric.textContent = String(total);
   }
 
   const previousRefreshInstalledCount = refreshInstalledCount;
