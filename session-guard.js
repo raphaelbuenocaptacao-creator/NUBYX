@@ -2,6 +2,19 @@
   const WATCH_MS = 500;
   let subscribed = false;
 
+  function scrubPrivateWorkspace() {
+    const panel = document.querySelector('#panel');
+    if (panel) {
+      panel.replaceChildren();
+      panel.innerHTML = '<div class="panel-title"><div><span class="eyebrow">NUBYX ID</span><h3>Sessão protegida</h3><small>Entre novamente para carregar seu workspace.</small></div></div>';
+    }
+
+    const installedCount = document.querySelector('#installedCount');
+    if (installedCount) installedCount.textContent = '—';
+
+    document.querySelectorAll('[data-user-scoped], [data-drive-open], [data-drive-delete], [data-store-key]').forEach((node) => node.remove());
+  }
+
   function lockCloudShell(reason = 'Sessão encerrada') {
     if (typeof currentProfile === 'undefined' || currentProfile?.mode !== 'supabase') return;
 
@@ -12,6 +25,7 @@
 
     currentProfile = null;
     localStorage.removeItem('nubyx_demo_session');
+    scrubPrivateWorkspace();
 
     const osShell = document.querySelector('#os');
     const authShell = document.querySelector('#auth');
@@ -42,5 +56,5 @@
   }, WATCH_MS);
 
   attachGuard();
-  window.NUBYX_SESSION_GUARD = { lock: lockCloudShell };
+  window.NUBYX_SESSION_GUARD = { lock: lockCloudShell, scrub: scrubPrivateWorkspace };
 })();
