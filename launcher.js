@@ -8,22 +8,38 @@
     }
   }
 
+  function syncLauncherCount(grid) {
+    if (!grid) return;
+    const total = grid.querySelectorAll(':scope > button').length;
+    const count = document.querySelector('#installedCount');
+    if (count) count.textContent = `${total} app${total === 1 ? '' : 's'}`;
+
+    const metric = document.querySelector('#appsMetric');
+    if (metric) metric.textContent = String(total);
+  }
+
+  function clearSessionApps() {
+    const grid = document.querySelector('#launcherGrid');
+    if (!grid) return;
+    grid.querySelectorAll('[data-installed-app]').forEach(node => node.remove());
+    syncLauncherCount(grid);
+  }
+
   async function refreshLauncher() {
     const grid = document.querySelector('#launcherGrid');
     if (!grid || typeof listInstalledApps !== 'function') return;
 
     grid.querySelectorAll('[data-installed-app]').forEach(node => node.remove());
-    const coreAppCount = grid.querySelectorAll(':scope > button:not([data-installed-app])').length;
 
     let installed = [];
     try {
       installed = await listInstalledApps();
     } catch (error) {
       console.warn('NUBYX launcher could not load installed apps.', error);
+      syncLauncherCount(grid);
       return;
     }
 
-    let renderedInstalledCount = 0;
     installed.forEach(app => {
       const url = safeHttpsUrl(app.app_url);
       if (!url) return;
@@ -48,15 +64,9 @@
         }
       });
       grid.appendChild(button);
-      renderedInstalledCount += 1;
     });
 
-    const total = coreAppCount + renderedInstalledCount;
-    const count = document.querySelector('#installedCount');
-    if (count) count.textContent = `${total} app${total === 1 ? '' : 's'}`;
-
-    const metric = document.querySelector('#appsMetric');
-    if (metric) metric.textContent = String(total);
+    syncLauncherCount(grid);
   }
 
   const previousRefreshInstalledCount = refreshInstalledCount;
@@ -65,5 +75,10 @@
     await refreshLauncher();
   };
 
-  window.NUBYX_LAUNCHER = Object.freeze({ refresh: refreshLauncher });
+  window.addEventListener('nubyx:session-ended', clearSessionApps);
+
+  window.NUBYX_LAUNCHER = Object.freeze({
+    refresh: refreshLauncher,
+    clearSessionApps
+  });
 })();
