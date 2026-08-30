@@ -29,6 +29,7 @@
     const grid = document.querySelector('#launcherGrid');
     if (!grid || typeof listInstalledApps !== 'function') return;
 
+    const profileAtStart = typeof currentProfile === 'undefined' ? null : currentProfile;
     grid.querySelectorAll('[data-installed-app]').forEach(node => node.remove());
 
     let installed = [];
@@ -37,6 +38,11 @@
     } catch (error) {
       console.warn('NUBYX launcher could not load installed apps.', error);
       syncLauncherCount(grid);
+      return;
+    }
+
+    if ((typeof currentProfile === 'undefined' ? null : currentProfile) !== profileAtStart) {
+      clearSessionApps();
       return;
     }
 
