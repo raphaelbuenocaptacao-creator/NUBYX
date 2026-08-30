@@ -87,6 +87,7 @@ async function listInstalledApps(){
     const { data, error } = await supabaseClient
       .from('user_apps')
       .select('app_key,app_name,app_url,icon,position')
+      .eq('user_id', currentProfile.userId)
       .order('position', {ascending:true});
     if(error){ console.error(error); showToast('Não foi possível sincronizar seus apps.'); return []; }
     return data || [];
@@ -124,7 +125,11 @@ async function uninstallApp(appKey){
   if(!currentProfile) return;
   const app = STORE_CATALOG.find(item=>item.key===appKey) || {key: appKey};
   if(currentProfile.mode === 'supabase' && supabaseClient){
-    const { error } = await supabaseClient.from('user_apps').delete().eq('app_key', appKey);
+    const { error } = await supabaseClient
+      .from('user_apps')
+      .delete()
+      .eq('user_id', currentProfile.userId)
+      .eq('app_key', appKey);
     if(error){ console.error(error); return showToast('Falha ao remover app.'); }
     await publishStoreSync(app, 'delete');
   } else {
@@ -186,6 +191,7 @@ async function listDriveFiles(){
     const {data,error}=await supabaseClient
       .from('files_meta')
       .select('id,name,mime_type,size_bytes,storage_path,created_at')
+      .eq('user_id', currentProfile.userId)
       .eq('folder','/')
       .order('created_at',{ascending:false});
     if(error){ console.error(error); showToast('Falha ao carregar o Drive.'); return []; }
@@ -254,7 +260,11 @@ async function deleteDriveFile(id){
   if(currentProfile.mode === 'supabase' && supabaseClient){
     const {error:storageError}=await supabaseClient.storage.from(DRIVE_BUCKET).remove([file.storage_path]);
     if(storageError){ console.error(storageError); return showToast('Falha ao remover arquivo do Storage.'); }
-    const {error:metaError}=await supabaseClient.from('files_meta').delete().eq('id',id);
+    const {error:metaError}=await supabaseClient
+      .from('files_meta')
+      .delete()
+      .eq('user_id', currentProfile.userId)
+      .eq('id',id);
     if(metaError){ console.error(metaError); return showToast('Arquivo removido, mas metadados precisam de reconciliação.'); }
   }else{
     await demoDriveAction('delete',id);
