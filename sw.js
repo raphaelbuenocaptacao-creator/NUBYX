@@ -1,8 +1,8 @@
-const CACHE_NAME='nubyx-v0.7.8-launcher-session-privacy';
+const CACHE_NAME='nubyx-v0.7.9-safe-shell';
 const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./app.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./pwa-launch.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 const RUNTIME_CONFIG_RE=/\/config\.js$/i;
-const SENSITIVE_QUERY_RE=/^(token|access_token|refresh_token|password|passwd|secret|session|auth|authorization|api_key|apikey|key)$/i;
+const SENSITIVE_QUERY_RE=/^(token|access_token|refresh_token|password|passwd|secret|session|auth|authorization|api_key|apikey|key|code|credential|credentials)$/i;
 
 function hasSensitiveQuery(url){
   for(const key of url.searchParams.keys()) if(SENSITIVE_QUERY_RE.test(key)) return true;
@@ -16,8 +16,12 @@ function relativeKey(url){
   return path ? `./${path}` : './';
 }
 
+function isAuthenticatedRequest(request){
+  return request.headers.has('authorization') || request.headers.has('cookie');
+}
+
 function isAllowedShellRequest(request){
-  if(request.method!=='GET'||request.headers.has('authorization')) return false;
+  if(request.method!=='GET'||isAuthenticatedRequest(request)) return false;
   const url=new URL(request.url);
   if(url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)||RUNTIME_CONFIG_RE.test(url.pathname)||hasSensitiveQuery(url)||url.search) return false;
   return STATIC_ASSETS.has(relativeKey(url));
@@ -46,7 +50,7 @@ self.addEventListener('fetch',event=>{
   }
 
   if(request.mode==='navigate'){
-    if(request.method!=='GET'||url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)||hasSensitiveQuery(url)) return;
+    if(request.method!=='GET'||url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)||hasSensitiveQuery(url)||isAuthenticatedRequest(request)) return;
     event.respondWith((async()=>{
       try{
         const preload=await event.preloadResponse;
