@@ -23,8 +23,11 @@
     }
   }
 
-  function pendingOutboxCount() {
-    const userId = activeUserId();
+  function isSameIdentity(expectedUserId) {
+    return activeUserId() === expectedUserId;
+  }
+
+  function pendingOutboxCount(userId = activeUserId()) {
     if (!userId || !('indexedDB' in window)) return Promise.resolve(0);
 
     return new Promise((resolve, reject) => {
@@ -55,13 +58,15 @@
     });
   }
 
-  async function waitForOutbox(timeoutMs = 8000) {
+  async function waitForOutbox(userId, timeoutMs = 8000) {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
-      if ((await pendingOutboxCount()) === 0) return true;
+      if (!isSameIdentity(userId)) return false;
+      if ((await pendingOutboxCount(userId)) === 0) return isSameIdentity(userId);
       await new Promise(resolve => setTimeout(resolve, 400));
     }
-    return (await pendingOutboxCount()) === 0;
+    if (!isSameIdentity(userId)) return false;
+    return (await pendingOutboxCount(userId)) === 0 && isSameIdentity(userId);
   }
 
   function showUpdatePrompt(worker) {
@@ -110,20 +115,42 @@
     update.textContent = 'Atualizar agora';
     update.style.cssText = 'border:0;border-radius:12px;padding:9px 13px;background:#fff;color:#070b12;font-weight:700;cursor:pointer';
     update.addEventListener('click', async () => {
+      const updateUserId = activeUserId();
       update.disabled = true;
       later.disabled = true;
       update.textContent = 'Verificando…';
 
+      const deferForIdentityChange = () => {
+        message.textContent = 'A conta mudou durante a verificação. A atualização foi adiada para proteger os dados da sessão.';
+        update.disabled = false;
+        later.disabled = false;
+        update.textContent = 'Tentar novamente';
+        window.dispatchEvent(new CustomEvent('nubyx:pwa-update-deferred', { detail: { reason: 'session_changed' } }));
+      };
+
       try {
-        let pending = await pendingOutboxCount();
+        let pending = await pendingOutboxCount(updateUserId);
+        if (!isSameIdentity(updateUserId)) {
+          deferForIdentityChange();
+          return;
+        }
+
         if (pending > 0) {
           message.textContent = `${pending} alteração${pending === 1 ? '' : 'ões'} aguardando sincronização. Enviando antes de atualizar…`;
           update.textContent = 'Sincronizando…';
           window.dispatchEvent(new CustomEvent('nubyx:sync-flush-request'));
 
-          const synced = await waitForOutbox();
+          const synced = await waitForOutbox(updateUserId);
+          if (!isSameIdentity(updateUserId)) {
+            deferForIdentityChange();
+            return;
+          }
           if (!synced) {
-            pending = await pendingOutboxCount();
+            pending = await pendingOutboxCount(updateUserId);
+            if (!isSameIdentity(updateUserId)) {
+              deferForIdentityChange();
+              return;
+            }
             message.textContent = `${pending} alteração${pending === 1 ? '' : 'ões'} ainda pendente${pending === 1 ? '' : 's'}. A atualização foi adiada para proteger seu trabalho.`;
             update.disabled = false;
             later.disabled = false;
@@ -131,6 +158,11 @@
             window.dispatchEvent(new CustomEvent('nubyx:pwa-update-deferred', { detail: { reason: 'sync_pending', pending } }));
             return;
           }
+        }
+
+        if (!isSameIdentity(updateUserId)) {
+          deferForIdentityChange();
+          return;
         }
 
         message.textContent = 'Sincronização confirmada. Aplicando a nova versão…';
