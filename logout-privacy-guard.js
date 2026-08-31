@@ -52,11 +52,26 @@
     } catch (_) {}
   }
 
+  function isMatchingSession(message, profile) {
+    if (!message || message.type !== 'session-ended') return false;
+    if (message.tabId === tabId || applyingRemoteSignal) return false;
+
+    const currentUserId = profile?.userId || null;
+    const currentMode = profile?.mode || 'unknown';
+    const sourceUserId = message.userId || null;
+    const sourceMode = message.mode || 'unknown';
+
+    if (currentUserId && sourceUserId) return currentUserId === sourceUserId;
+    if (currentUserId || sourceUserId) return false;
+    return currentMode === sourceMode;
+  }
+
   function applyRemoteSessionEnd(message) {
-    if (!message || message.type !== 'session-ended' || message.tabId === tabId || applyingRemoteSignal) return;
+    const profile = typeof currentProfile !== 'undefined' ? currentProfile : null;
+    if (!isMatchingSession(message, profile)) return;
+
     applyingRemoteSignal = true;
     try {
-      const profile = typeof currentProfile !== 'undefined' ? currentProfile : null;
       window.dispatchEvent(new CustomEvent('nubyx:session-ended', {
         detail: {
           userId: message.userId || profile?.userId || null,
