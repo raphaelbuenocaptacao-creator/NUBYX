@@ -1,6 +1,6 @@
 (() => {
   const DB_NAME = 'nubyx-continuity';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const STORE_NAME = 'outbox';
   const MAX_QUEUE_PER_USER = 100;
   const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -19,9 +19,14 @@
       const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onupgradeneeded = () => {
         const db = request.result;
-        if(!db.objectStoreNames.contains(STORE_NAME)){
-          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        const store = db.objectStoreNames.contains(STORE_NAME)
+          ? request.transaction.objectStore(STORE_NAME)
+          : db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        if(!store.indexNames.contains('user_created')){
           store.createIndex('user_created', ['user_id', 'created_at'], { unique: false });
+        }
+        if(!store.indexNames.contains('user_client')){
+          store.createIndex('user_client', ['user_id', 'client_event_key'], { unique: false });
         }
       };
       request.onsuccess = () => resolve(request.result);
@@ -53,6 +58,29 @@
       request.onerror = () => reject(request.error);
       tx.oncomplete = () => db.close();
       tx.onerror = () => db.close();
+    });
+  }
+
+  async function addIfMissing(row){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const index = store.index('user_client');
+      const request = index.get([row.user_id, row.client_event_key]);
+      let result = { added: false, existing: null };
+      request.onsuccess = () => {
+        if(request.result){
+          result = { added: false, existing: request.result };
+          return;
+        }
+        store.add(row);
+        result = { added: true, existing: null };
+      };
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => { db.close(); resolve(result); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+      tx.onabort = () => { db.close(); reject(tx.error || new Error('NUBYX outbox atomic enqueue aborted')); };
     });
   }
 
@@ -120,31 +148,27 @@
     await prune(userId);
     if(!sessionStillMatches(userId, generation)) return false;
 
-    const existing = (await listForUser(userId)).find(row => row.client_event_key === clientEventKey);
-    if(existing){
-      window.dispatchEvent(new CustomEvent('nubyx:sync-queued', {
-        detail: { channel: existing.channel, entityKey: existing.entity_key, deduplicated: true }
-      }));
-      return true;
-    }
-
-    if(!sessionStillMatches(userId, generation)) return false;
-    await withStore('readwrite', store => {
-      if(!sessionStillMatches(userId, generation)) return;
-      store.add({
-        user_id: userId,
-        channel: channelName,
-        entity_key: entityKey,
-        event_type: eventType,
-        payload,
-        client_event_key: clientEventKey,
-        created_at: Date.now()
-      });
+    const atomic = await addIfMissing({
+      user_id: userId,
+      channel: channelName,
+      entity_key: entityKey,
+      event_type: eventType,
+      payload,
+      client_event_key: clientEventKey,
+      created_at: Date.now()
     });
     if(!sessionStillMatches(userId, generation)){
       await purgeUser(userId);
       return false;
     }
+    if(!atomic.added){
+      const existing = atomic.existing;
+      window.dispatchEvent(new CustomEvent('nubyx:sync-queued', {
+        detail: { channel: existing?.channel || channelName, entityKey: existing?.entity_key || entityKey, deduplicated: true }
+      }));
+      return true;
+    }
+
     await prune(userId);
     window.dispatchEvent(new CustomEvent('nubyx:sync-queued', { detail: { channel: channelName, entityKey } }));
     return true;
