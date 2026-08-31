@@ -29,8 +29,12 @@
     }
   }
 
+  function hasActiveSession(fingerprint = sessionFingerprint()) {
+    return fingerprint !== 'signed-out' && fingerprint !== 'unavailable';
+  }
+
   function isFreshQuery(sequence, fingerprint) {
-    return sequence === querySequence && fingerprint === sessionFingerprint();
+    return sequence === querySequence && fingerprint === sessionFingerprint() && hasActiveSession(fingerprint);
   }
 
   function safeOpenModule(target, sequence, fingerprint, delay = 250) {
@@ -50,6 +54,9 @@
   function renderAnswer(title, text, items = []) {
     const answer = document.querySelector('#aiAnswer');
     if (!answer) return;
+    const answerFingerprint = sessionFingerprint();
+    if (!hasActiveSession(answerFingerprint)) return;
+
     answer.innerHTML = `
       <div class="ai-answer-head"><span>✦</span><div><b>${aiEscape(title)}</b><small>NUBYX AI · processamento local</small></div></div>
       <p>${aiEscape(text)}</p>
@@ -60,6 +67,7 @@
 
     answer.querySelectorAll('[data-ai-target]').forEach((button) => {
       button.addEventListener('click', () => {
+        if (answerFingerprint !== sessionFingerprint() || !hasActiveSession(answerFingerprint)) return;
         const target = button.dataset.aiTarget;
         if (target === 'drive') openModule('drive');
         if (target === 'store') openModule('store');
@@ -83,6 +91,10 @@
 
     const sequence = ++querySequence;
     const fingerprint = sessionFingerprint();
+    if (!hasActiveSession(fingerprint)) {
+      clearSessionScopedAI();
+      return;
+    }
 
     if (query.includes('abrir drive') || query === 'drive') {
       renderAnswer('Abrindo o Drive', 'Vou levar você ao seu espaço privado de arquivos.');
@@ -152,6 +164,12 @@
   async function renderNubyxAI() {
     const panel = document.querySelector('#panel');
     if (!panel) return;
+    const fingerprint = sessionFingerprint();
+    if (!hasActiveSession(fingerprint)) {
+      panel.innerHTML = '<div class="panel-title ai-title"><div><span class="eyebrow">NUBYX AI</span><h3>Entre com seu NUBYX ID</h3><small>O assistente só acessa contexto dentro de uma sessão válida.</small></div><span class="ai-status">● BLOQUEADO</span></div>';
+      return;
+    }
+
     querySequence += 1;
     panel.innerHTML = `
       <div class="panel-title ai-title"><div><span class="eyebrow">NUBYX AI</span><h3>Comando central do seu ambiente</h3><small>Assistente local seguro · nenhuma ação destrutiva automática</small></div><span class="ai-status">● LOCAL CORE</span></div>
@@ -163,11 +181,13 @@
 
     document.querySelector('#aiForm')?.addEventListener('submit', (event) => {
       event.preventDefault();
+      if (fingerprint !== sessionFingerprint()) return;
       runQuery(document.querySelector('#aiInput')?.value || '');
     });
 
     panel.querySelectorAll('[data-ai-command]').forEach((button) => {
       button.addEventListener('click', () => {
+        if (fingerprint !== sessionFingerprint()) return;
         const input = document.querySelector('#aiInput');
         if (input) input.value = button.dataset.aiCommand || '';
         runQuery(button.dataset.aiCommand || '');
