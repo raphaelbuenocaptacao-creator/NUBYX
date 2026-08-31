@@ -4,14 +4,33 @@
   const STORE_NAME = 'outbox';
   const MAX_QUEUE_PER_USER = 100;
   const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+  const RETRY_DELAYS_MS = [2000, 5000, 15000, 30000, 60000];
   let flushing = false;
   let sessionGeneration = 0;
   let lastKnownUserId = null;
+  let retryTimer = null;
+  let retryAttempt = 0;
 
   function currentUserId(){
     const userId = currentProfile?.mode === 'supabase' ? currentProfile?.userId || null : null;
     if(userId) lastKnownUserId = userId;
     return userId;
+  }
+
+  function clearRetry(){
+    if(retryTimer){ clearTimeout(retryTimer); retryTimer = null; }
+    retryAttempt = 0;
+  }
+
+  function scheduleRetry(){
+    if(retryTimer || !navigator.onLine || !currentUserId()) return;
+    const delay = RETRY_DELAYS_MS[Math.min(retryAttempt, RETRY_DELAYS_MS.length - 1)];
+    retryAttempt += 1;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      flush();
+    }, delay);
+    window.dispatchEvent(new CustomEvent('nubyx:sync-retry-scheduled', { detail: { delay, attempt: retryAttempt } }));
   }
 
   function openDb(){
@@ -180,6 +199,7 @@
     const generation = sessionGeneration;
     if(flushing || !navigator.onLine || !userId || !continuity?.ready || typeof continuity.__publishOnline !== 'function') return;
     flushing = true;
+    let shouldRetry = false;
     try {
       await purgeForeignUsers(userId);
       if(generation !== sessionGeneration || currentUserId() !== userId) return;
@@ -199,18 +219,22 @@
         if(result?.ok){
           await remove(row.id);
           sent += 1;
+          retryAttempt = 0;
           continue;
         }
         if(['schema_missing','not_authenticated','device_unavailable'].includes(result?.reason)) break;
+        shouldRetry = navigator.onLine;
         break;
       }
       if(sent && generation === sessionGeneration && currentUserId() === userId){
         window.dispatchEvent(new CustomEvent('nubyx:sync-flushed', { detail: { count: sent } }));
       }
     } catch(error){
+      shouldRetry = navigator.onLine && generation === sessionGeneration && currentUserId() === userId;
       console.warn('NUBYX Continuity offline queue flush failed', error);
     } finally {
       flushing = false;
+      if(shouldRetry) scheduleRetry();
     }
   }
 
@@ -253,11 +277,18 @@
     }
   }, 250);
 
-  window.addEventListener('online', () => setTimeout(flush, 400));
+  window.addEventListener('online', () => {
+    clearRetry();
+    setTimeout(flush, 400);
+  });
+  window.addEventListener('offline', () => {
+    if(retryTimer){ clearTimeout(retryTimer); retryTimer = null; }
+  });
   window.addEventListener('nubyx:sync-published', flush);
   window.addEventListener('nubyx:sync-flush-request', flush);
   window.addEventListener('nubyx:session-ended', event => {
     sessionGeneration += 1;
+    clearRetry();
     const userId = event?.detail?.userId || lastKnownUserId || null;
     lastKnownUserId = null;
     purgeUser(userId).catch(error => console.warn('NUBYX Continuity queue purge failed', error));
