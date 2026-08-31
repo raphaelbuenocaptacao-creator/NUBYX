@@ -2,6 +2,8 @@
   if (!('serviceWorker' in navigator)) return;
 
   const hadControllerAtBoot = Boolean(navigator.serviceWorker.controller);
+  const OUTBOX_DB = 'nubyx-continuity';
+  const OUTBOX_STORE = 'outbox';
   let reloading = false;
   let updatePrompt = null;
 
@@ -9,6 +11,57 @@
     if (!updatePrompt) return;
     updatePrompt.remove();
     updatePrompt = null;
+  }
+
+  function activeUserId() {
+    try {
+      return typeof currentProfile !== 'undefined' && currentProfile?.mode === 'supabase'
+        ? currentProfile?.userId || null
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function pendingOutboxCount() {
+    const userId = activeUserId();
+    if (!userId || !('indexedDB' in window)) return Promise.resolve(0);
+
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(OUTBOX_DB);
+      request.onerror = () => reject(request.error || new Error('Unable to inspect NUBYX outbox'));
+      request.onsuccess = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(OUTBOX_STORE)) {
+          db.close();
+          resolve(0);
+          return;
+        }
+        const tx = db.transaction(OUTBOX_STORE, 'readonly');
+        const store = tx.objectStore(OUTBOX_STORE);
+        if (!store.indexNames.contains('user_created')) {
+          db.close();
+          resolve(0);
+          return;
+        }
+        const range = IDBKeyRange.bound([userId, 0], [userId, Number.MAX_SAFE_INTEGER]);
+        const count = store.index('user_created').count(range);
+        count.onsuccess = () => resolve(count.result || 0);
+        count.onerror = () => reject(count.error || new Error('Unable to count NUBYX outbox'));
+        tx.oncomplete = () => db.close();
+        tx.onerror = () => db.close();
+        tx.onabort = () => db.close();
+      };
+    });
+  }
+
+  async function waitForOutbox(timeoutMs = 8000) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if ((await pendingOutboxCount()) === 0) return true;
+      await new Promise(resolve => setTimeout(resolve, 400));
+    }
+    return (await pendingOutboxCount()) === 0;
   }
 
   function showUpdatePrompt(worker) {
@@ -35,7 +88,13 @@
     ].join(';');
 
     const copy = document.createElement('div');
-    copy.innerHTML = '<strong style="display:block;font-size:15px;margin-bottom:3px">Nova versão do NUBYX pronta</strong><span style="opacity:.72">Atualize quando for seguro. Seu trabalho atual não será interrompido.</span>';
+    const title = document.createElement('strong');
+    title.style.cssText = 'display:block;font-size:15px;margin-bottom:3px';
+    title.textContent = 'Nova versão do NUBYX pronta';
+    const message = document.createElement('span');
+    message.style.opacity = '.72';
+    message.textContent = 'Atualize quando for seguro. O NUBYX confirma a sincronização antes de recarregar.';
+    copy.append(title, message);
 
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:12px';
@@ -50,10 +109,41 @@
     update.type = 'button';
     update.textContent = 'Atualizar agora';
     update.style.cssText = 'border:0;border-radius:12px;padding:9px 13px;background:#fff;color:#070b12;font-weight:700;cursor:pointer';
-    update.addEventListener('click', () => {
+    update.addEventListener('click', async () => {
       update.disabled = true;
-      update.textContent = 'Atualizando…';
-      worker.postMessage({ type: 'NUBYX_SKIP_WAITING' });
+      later.disabled = true;
+      update.textContent = 'Verificando…';
+
+      try {
+        let pending = await pendingOutboxCount();
+        if (pending > 0) {
+          message.textContent = `${pending} alteração${pending === 1 ? '' : 'ões'} aguardando sincronização. Enviando antes de atualizar…`;
+          update.textContent = 'Sincronizando…';
+          window.dispatchEvent(new CustomEvent('nubyx:sync-flush-request'));
+
+          const synced = await waitForOutbox();
+          if (!synced) {
+            pending = await pendingOutboxCount();
+            message.textContent = `${pending} alteração${pending === 1 ? '' : 'ões'} ainda pendente${pending === 1 ? '' : 's'}. A atualização foi adiada para proteger seu trabalho.`;
+            update.disabled = false;
+            later.disabled = false;
+            update.textContent = 'Tentar novamente';
+            window.dispatchEvent(new CustomEvent('nubyx:pwa-update-deferred', { detail: { reason: 'sync_pending', pending } }));
+            return;
+          }
+        }
+
+        message.textContent = 'Sincronização confirmada. Aplicando a nova versão…';
+        update.textContent = 'Atualizando…';
+        worker.postMessage({ type: 'NUBYX_SKIP_WAITING' });
+      } catch (error) {
+        console.warn('NUBYX update safety check failed', error);
+        message.textContent = 'Não foi possível confirmar a sincronização. A atualização foi adiada por segurança.';
+        update.disabled = false;
+        later.disabled = false;
+        update.textContent = 'Tentar novamente';
+        window.dispatchEvent(new CustomEvent('nubyx:pwa-update-deferred', { detail: { reason: 'sync_check_failed' } }));
+      }
     });
 
     actions.append(later, update);
