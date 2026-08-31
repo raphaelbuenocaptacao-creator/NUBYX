@@ -259,11 +259,16 @@
       }
 
       const result = await publishOnline(channelName, entityKey, eventType, payload, { ...options, clientEventKey });
-      if(!result?.ok && result?.reason === 'publish_failed' && !navigator.onLine){
+      if(!result?.ok && result?.reason === 'publish_failed'){
         const queued = await enqueue(userId, channelName, entityKey, eventType, payload, clientEventKey, generation);
-        return queued
-          ? { ok: true, queued: true, reason: 'offline', clientEventKey }
-          : { ok: false, queued: false, reason: 'session_changed', clientEventKey };
+        if(!queued) return { ok: false, queued: false, reason: 'session_changed', clientEventKey };
+        if(navigator.onLine) scheduleRetry();
+        return {
+          ok: true,
+          queued: true,
+          reason: navigator.onLine ? 'transient_failure' : 'offline',
+          clientEventKey
+        };
       }
       return result;
     };
