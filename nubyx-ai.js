@@ -43,12 +43,14 @@
     }, delay);
   }
 
-  async function getContext() {
-    const [files, apps] = await Promise.all([
-      typeof listDriveFiles === 'function' ? listDriveFiles() : Promise.resolve([]),
-      typeof listInstalledApps === 'function' ? listInstalledApps() : Promise.resolve([])
-    ]);
-    return { files: files || [], apps: apps || [] };
+  async function getDriveContext() {
+    if (typeof listDriveFiles !== 'function') return [];
+    return (await listDriveFiles()) || [];
+  }
+
+  async function getStoreContext() {
+    if (typeof listInstalledApps !== 'function') return [];
+    return (await listInstalledApps()) || [];
   }
 
   function renderAnswer(title, text, items = []) {
@@ -108,20 +110,26 @@
       return;
     }
 
-    let context;
-    try {
-      context = await getContext();
-    } catch (_) {
-      if (isFreshQuery(sequence, fingerprint)) {
-        renderAnswer('Contexto indisponível', 'Não consegui consultar Drive e Store com segurança agora. Sua sessão não foi alterada; tente novamente.');
-      }
+    if (query.includes('segur') || query.includes('privacidade')) {
+      const cloud = typeof currentProfile !== 'undefined' && currentProfile?.mode === 'supabase';
+      renderAnswer('Estado de segurança', cloud
+        ? 'Sua sessão está autenticada. Drive e apps usam isolamento por usuário preparado com RLS no Supabase.'
+        : 'Você está no modo demonstração. Os dados ficam somente neste dispositivo e não são sincronizados com uma conta real.');
       return;
     }
 
-    if (!isFreshQuery(sequence, fingerprint)) return;
-    const { files, apps } = context;
-
     if (query.includes('arquivo') || query.includes('pdf') || query.includes('documento') || query.includes('imagem')) {
+      let files;
+      try {
+        files = await getDriveContext();
+      } catch (_) {
+        if (isFreshQuery(sequence, fingerprint)) {
+          renderAnswer('Drive indisponível', 'Não consegui consultar seu Drive com segurança agora. Sua sessão não foi alterada; tente novamente.');
+        }
+        return;
+      }
+      if (!isFreshQuery(sequence, fingerprint)) return;
+
       const terms = query.split(/\s+/).filter((term) => term.length > 2 && !['arquivo','arquivos','documento','documentos','mostrar','buscar','procure','meus'].includes(term));
       const matches = files.filter((file) => {
         const haystack = normalize(`${file.name || ''} ${file.mime_type || ''}`);
@@ -140,6 +148,17 @@
     }
 
     if (query.includes('app') || query.includes('instalado') || query.includes('aplicativo')) {
+      let apps;
+      try {
+        apps = await getStoreContext();
+      } catch (_) {
+        if (isFreshQuery(sequence, fingerprint)) {
+          renderAnswer('Store indisponível', 'Não consegui consultar seus apps com segurança agora. Sua sessão não foi alterada; tente novamente.');
+        }
+        return;
+      }
+      if (!isFreshQuery(sequence, fingerprint)) return;
+
       if (!apps.length) {
         renderAnswer('Nenhum app extra instalado', 'Sua Store não possui apps extras instalados neste perfil.', [{ icon: '⊞', title: 'Abrir NUBYX Store', subtitle: 'Explorar catálogo', target: 'store' }]);
         return;
@@ -147,14 +166,6 @@
       renderAnswer('Apps instalados', `Você possui ${apps.length} app${apps.length === 1 ? '' : 's'} extra${apps.length === 1 ? '' : 's'} no seu ambiente.`, apps.slice(0, 6).map((app) => ({
         icon: app.icon || '⊞', title: app.app_name || app.app_key || 'App', subtitle: 'Instalado no NUBYX', target: 'store'
       })));
-      return;
-    }
-
-    if (query.includes('segur') || query.includes('privacidade')) {
-      const cloud = typeof currentProfile !== 'undefined' && currentProfile?.mode === 'supabase';
-      renderAnswer('Estado de segurança', cloud
-        ? 'Sua sessão está autenticada. Drive e apps usam isolamento por usuário preparado com RLS no Supabase.'
-        : 'Você está no modo demonstração. Os dados ficam somente neste dispositivo e não são sincronizados com uma conta real.');
       return;
     }
 
