@@ -1,9 +1,9 @@
 const CACHE_PREFIX='nubyx-';
-const CACHE_NAME='nubyx-v0.10.7-sync-session-race-guard';
+const CACHE_NAME='nubyx-v0.10.8-sensitive-auth-query-hardening';
 const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./home-2050.css','./auth-2050.css','./app.js','./identity-runtime.js','./auth-revocation-guard.js','./store-session-guard.js','./store-read-session-guard.js','./store-input-guard.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./logout-privacy-guard.js','./pwa-launch.js','./pwa-update.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 const RUNTIME_CONFIG_RE=/\/config\.js$/i;
-const SENSITIVE_QUERY_RE=/^(token|access_token|refresh_token|password|passwd|secret|session|auth|authorization|api_key|apikey|key|code|credential|credentials)$/i;
+const SENSITIVE_QUERY_RE=/^(token|access_token|refresh_token|id_token|jwt|password|passwd|secret|client_secret|session|auth|authorization|api_key|apikey|key|code|credential|credentials|assertion|samlresponse|signature|sig)$/i;
 function hasSensitiveQuery(url){for(const key of url.searchParams.keys())if(SENSITIVE_QUERY_RE.test(key))return true;return false}
 function relativeKey(url){const scopePath=new URL(self.registration.scope).pathname;let path=url.pathname.startsWith(scopePath)?url.pathname.slice(scopePath.length):url.pathname;path=path.replace(/^\//,'');return path?`./${path}`:'./'}
 function isAuthenticatedRequest(request){return request.headers.has('authorization')||request.headers.has('cookie')}
