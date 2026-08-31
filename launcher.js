@@ -1,8 +1,12 @@
 (() => {
+  const MAX_APP_URL_LENGTH = 2048;
+
   function safeHttpsUrl(value) {
+    if (typeof value !== 'string' || !value || value.length > MAX_APP_URL_LENGTH) return null;
     try {
       const url = new URL(value);
-      return url.protocol === 'https:' ? url.href : null;
+      if (url.protocol !== 'https:' || url.username || url.password) return null;
+      return url.href;
     } catch {
       return null;
     }
