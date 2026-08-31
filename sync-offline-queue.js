@@ -259,6 +259,9 @@
       }
 
       const result = await publishOnline(channelName, entityKey, eventType, payload, { ...options, clientEventKey });
+      if(!sessionStillMatches(userId, generation)){
+        return { ok: false, queued: false, reason: 'session_changed', clientEventKey };
+      }
       if(!result?.ok && result?.reason === 'publish_failed'){
         const queued = await enqueue(userId, channelName, entityKey, eventType, payload, clientEventKey, generation);
         if(!queued) return { ok: false, queued: false, reason: 'session_changed', clientEventKey };
