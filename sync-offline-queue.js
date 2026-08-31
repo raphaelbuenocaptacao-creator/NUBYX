@@ -119,6 +119,16 @@
     if(!sessionStillMatches(userId, generation)) return false;
     await prune(userId);
     if(!sessionStillMatches(userId, generation)) return false;
+
+    const existing = (await listForUser(userId)).find(row => row.client_event_key === clientEventKey);
+    if(existing){
+      window.dispatchEvent(new CustomEvent('nubyx:sync-queued', {
+        detail: { channel: existing.channel, entityKey: existing.entity_key, deduplicated: true }
+      }));
+      return true;
+    }
+
+    if(!sessionStillMatches(userId, generation)) return false;
     await withStore('readwrite', store => {
       if(!sessionStillMatches(userId, generation)) return;
       store.add({
