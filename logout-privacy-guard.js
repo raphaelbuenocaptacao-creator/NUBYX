@@ -35,6 +35,18 @@
     document.querySelectorAll('[data-user-scoped], [data-drive-open], [data-drive-delete], [data-store-key]').forEach((node) => node.remove());
   }
 
+  async function revokeLocalCloudSession(profile) {
+    if (profile?.mode !== 'supabase') return;
+    if (typeof supabaseClient === 'undefined' || !supabaseClient?.auth?.signOut) return;
+
+    try {
+      const { error } = await supabaseClient.auth.signOut({ scope: 'local' });
+      if (error) console.warn('NUBYX: logout remoto não conseguiu revogar a sessão local.', error);
+    } catch (error) {
+      console.warn('NUBYX: falha ao revogar a sessão local após logout remoto.', error);
+    }
+  }
+
   function publishSessionEnd(detail) {
     if (detail?.remote || applyingRemoteSignal) return;
     const message = {
@@ -85,6 +97,7 @@
       if (typeof currentProfile !== 'undefined') currentProfile = null;
       document.querySelector('#os')?.classList.add('hidden');
       document.querySelector('#auth')?.classList.remove('hidden');
+      void revokeLocalCloudSession(profile);
     } finally {
       applyingRemoteSignal = false;
     }
