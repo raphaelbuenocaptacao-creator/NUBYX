@@ -87,14 +87,17 @@
       const store = tx.objectStore(STORE_NAME);
       const index = store.index('user_client');
       const request = index.get([row.user_id, row.client_event_key]);
-      let result = { added: false, existing: null };
+      let result = { added: false, existing: null, id: null };
       request.onsuccess = () => {
         if(request.result){
-          result = { added: false, existing: request.result };
+          result = { added: false, existing: request.result, id: request.result.id ?? null };
           return;
         }
-        store.add(row);
-        result = { added: true, existing: null };
+        const addRequest = store.add(row);
+        addRequest.onsuccess = () => {
+          result = { added: true, existing: null, id: addRequest.result };
+        };
+        addRequest.onerror = () => reject(addRequest.error);
       };
       request.onerror = () => reject(request.error);
       tx.oncomplete = () => { db.close(); resolve(result); };
@@ -104,6 +107,7 @@
   }
 
   async function remove(id){
+    if(id == null) return;
     await withStore('readwrite', store => store.delete(id));
   }
 
@@ -177,7 +181,7 @@
       created_at: Date.now()
     });
     if(!sessionStillMatches(userId, generation)){
-      await purgeUser(userId);
+      if(atomic.added) await remove(atomic.id);
       return false;
     }
     if(!atomic.added){
