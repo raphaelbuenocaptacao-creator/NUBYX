@@ -55,11 +55,12 @@
     return (await listInstalledApps()) || [];
   }
 
-  function renderAnswer(title, text, items = []) {
+  function renderAnswer(title, text, items = [], expectedFingerprint = sessionFingerprint()) {
+    const activeFingerprint = sessionFingerprint();
+    if (!hasActiveSession(expectedFingerprint) || expectedFingerprint !== activeFingerprint) return;
+
     const answer = document.querySelector('#aiAnswer');
     if (!answer) return;
-    const answerFingerprint = sessionFingerprint();
-    if (!hasActiveSession(answerFingerprint)) return;
 
     answer.innerHTML = `
       <div class="ai-answer-head"><span>✦</span><div><b>${aiEscape(title)}</b><small>NUBYX AI · processamento local</small></div></div>
@@ -71,7 +72,7 @@
 
     answer.querySelectorAll('[data-ai-target]').forEach((button) => {
       button.addEventListener('click', () => {
-        if (answerFingerprint !== sessionFingerprint() || !hasActiveSession(answerFingerprint)) return;
+        if (expectedFingerprint !== sessionFingerprint() || !hasActiveSession(expectedFingerprint)) return;
         const target = button.dataset.aiTarget;
         if (target === 'drive') openModule('drive');
         if (target === 'store') openModule('store');
@@ -100,8 +101,10 @@
       return;
     }
 
+    const respond = (title, text, items = []) => renderAnswer(title, text, items, fingerprint);
+
     if (raw.length > MAX_QUERY_CHARS) {
-      renderAnswer('Comando muito longo', `Para manter o NUBYX AI rápido e seguro, use até ${MAX_QUERY_CHARS} caracteres por comando.`);
+      respond('Comando muito longo', `Para manter o NUBYX AI rápido e seguro, use até ${MAX_QUERY_CHARS} caracteres por comando.`);
       return;
     }
 
@@ -109,20 +112,20 @@
     if (!query) return;
 
     if (query.includes('abrir drive') || query === 'drive') {
-      renderAnswer('Abrindo o Drive', 'Vou levar você ao seu espaço privado de arquivos.');
+      respond('Abrindo o Drive', 'Vou levar você ao seu espaço privado de arquivos.');
       safeOpenModule('drive', sequence, fingerprint);
       return;
     }
 
     if (query.includes('abrir store') || query === 'store' || query.includes('loja')) {
-      renderAnswer('Abrindo a Store', 'Vou abrir o catálogo de PWAs e serviços web compatíveis.');
+      respond('Abrindo a Store', 'Vou abrir o catálogo de PWAs e serviços web compatíveis.');
       safeOpenModule('store', sequence, fingerprint);
       return;
     }
 
     if (query.includes('segur') || query.includes('privacidade')) {
       const cloud = typeof currentProfile !== 'undefined' && currentProfile?.mode === 'supabase';
-      renderAnswer('Estado de segurança', cloud
+      respond('Estado de segurança', cloud
         ? 'Sua sessão está autenticada. Drive e apps usam isolamento por usuário preparado com RLS no Supabase.'
         : 'Você está no modo demonstração. Os dados ficam somente neste dispositivo e não são sincronizados com uma conta real.');
       return;
@@ -134,7 +137,7 @@
         files = await getDriveContext();
       } catch (_) {
         if (isFreshQuery(sequence, fingerprint)) {
-          renderAnswer('Drive indisponível', 'Não consegui consultar seu Drive com segurança agora. Sua sessão não foi alterada; tente novamente.');
+          respond('Drive indisponível', 'Não consegui consultar seu Drive com segurança agora. Sua sessão não foi alterada; tente novamente.');
         }
         return;
       }
@@ -149,11 +152,11 @@
       }).slice(0, 6);
 
       if (!matches.length) {
-        renderAnswer('Nenhum arquivo encontrado', 'Não encontrei arquivos compatíveis com essa busca no seu NUBYX Drive.');
+        respond('Nenhum arquivo encontrado', 'Não encontrei arquivos compatíveis com essa busca no seu NUBYX Drive.');
         return;
       }
 
-      renderAnswer('Arquivos encontrados', `Encontrei ${matches.length} resultado${matches.length === 1 ? '' : 's'} no seu Drive.`, matches.map((file) => ({
+      respond('Arquivos encontrados', `Encontrei ${matches.length} resultado${matches.length === 1 ? '' : 's'} no seu Drive.`, matches.map((file) => ({
         icon: '◫', title: file.name || 'Arquivo', subtitle: file.mime_type || 'arquivo', target: 'drive'
       })));
       return;
@@ -165,23 +168,23 @@
         apps = await getStoreContext();
       } catch (_) {
         if (isFreshQuery(sequence, fingerprint)) {
-          renderAnswer('Store indisponível', 'Não consegui consultar seus apps com segurança agora. Sua sessão não foi alterada; tente novamente.');
+          respond('Store indisponível', 'Não consegui consultar seus apps com segurança agora. Sua sessão não foi alterada; tente novamente.');
         }
         return;
       }
       if (!isFreshQuery(sequence, fingerprint)) return;
 
       if (!apps.length) {
-        renderAnswer('Nenhum app extra instalado', 'Sua Store não possui apps extras instalados neste perfil.', [{ icon: '⊞', title: 'Abrir NUBYX Store', subtitle: 'Explorar catálogo', target: 'store' }]);
+        respond('Nenhum app extra instalado', 'Sua Store não possui apps extras instalados neste perfil.', [{ icon: '⊞', title: 'Abrir NUBYX Store', subtitle: 'Explorar catálogo', target: 'store' }]);
         return;
       }
-      renderAnswer('Apps instalados', `Você possui ${apps.length} app${apps.length === 1 ? '' : 's'} extra${apps.length === 1 ? '' : 's'} no seu ambiente.`, apps.slice(0, 6).map((app) => ({
+      respond('Apps instalados', `Você possui ${apps.length} app${apps.length === 1 ? '' : 's'} extra${apps.length === 1 ? '' : 's'} no seu ambiente.`, apps.slice(0, 6).map((app) => ({
         icon: app.icon || '⊞', title: app.app_name || app.app_key || 'App', subtitle: 'Instalado no NUBYX', target: 'store'
       })));
       return;
     }
 
-    renderAnswer('Posso agir dentro do NUBYX', 'Nesta etapa eu opero localmente e só executo ações permitidas. Tente “abrir Drive”, “mostrar meus arquivos”, “apps instalados” ou “estado de segurança”.');
+    respond('Posso agir dentro do NUBYX', 'Nesta etapa eu opero localmente e só executo ações permitidas. Tente “abrir Drive”, “mostrar meus arquivos”, “apps instalados” ou “estado de segurança”.');
   }
 
   async function renderNubyxAI() {
