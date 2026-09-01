@@ -1,6 +1,9 @@
 (() => {
   if (typeof listInstalledApps !== 'function') return;
 
+  let storeRenderGeneration = 0;
+  let installedCountGeneration = 0;
+
   function captureSession() {
     if (typeof currentProfile === 'undefined' || !currentProfile) return null;
     return {
@@ -42,19 +45,21 @@
   }
 
   async function guardedRefreshInstalledCount() {
+    const generation = ++installedCountGeneration;
     const session = captureSession();
     if (!session) return;
     const custom = await guardedListInstalledApps();
-    if (!isSameSession(session)) return;
+    if (generation !== installedCountGeneration || !isSameSession(session)) return;
     const target = document.querySelector('#installedCount');
     if (target) target.textContent = `${8 + custom.length} apps`;
   }
 
   async function guardedRenderStore() {
+    const generation = ++storeRenderGeneration;
     const session = captureSession();
     if (!session) return;
     const installed = await guardedListInstalledApps();
-    if (!isSameSession(session)) return;
+    if (generation !== storeRenderGeneration || !isSameSession(session)) return;
 
     const panel = document.querySelector('#panel');
     if (!panel || typeof STORE_CATALOG === 'undefined') return;
@@ -67,7 +72,7 @@
       <p class="fine">A NUBYX Store instala atalhos e PWAs/serviços web compatíveis. Ela não executa APKs Android dentro do PWA.</p>`;
 
     panel.querySelectorAll('[data-store-key]').forEach(button => button.addEventListener('click', () => {
-      if (!isSameSession(session)) return;
+      if (generation !== storeRenderGeneration || !isSameSession(session)) return;
       const app = STORE_CATALOG.find(item => item.key === button.dataset.storeKey);
       if (!app) return;
       button.dataset.storeAction === 'remove' ? uninstallApp(app.key) : installApp(app);
