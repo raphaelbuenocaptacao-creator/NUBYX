@@ -31,6 +31,27 @@
     if (typeof showToast === 'function') showToast('Sessão encerrada. Entre novamente no NUBYX ID.');
   }
 
+  function authenticatedUserId(session) {
+    const id = session?.user?.id;
+    return typeof id === 'string' && id.trim() ? id.trim() : null;
+  }
+
+  function enforceSessionIdentity(event, session) {
+    if (!session) {
+      clearPrivateWorkspace(`auth_${String(event || 'signed_out').toLowerCase()}`);
+      return;
+    }
+
+    if (typeof currentProfile === 'undefined' || currentProfile?.mode !== 'supabase') return;
+
+    const activeUserId = typeof currentProfile?.userId === 'string' ? currentProfile.userId.trim() : '';
+    const sessionUserId = authenticatedUserId(session);
+
+    if (!activeUserId || !sessionUserId || activeUserId !== sessionUserId) {
+      clearPrivateWorkspace('auth_identity_changed');
+    }
+  }
+
   function attachGuard() {
     attempts += 1;
 
@@ -41,7 +62,7 @@
       }
 
       const { data } = supabaseClient.auth.onAuthStateChange((event, session) => {
-        if (!session) clearPrivateWorkspace(`auth_${String(event || 'signed_out').toLowerCase()}`);
+        enforceSessionIdentity(event, session);
       });
 
       unsubscribe = data?.subscription?.unsubscribe?.bind(data.subscription) || null;
