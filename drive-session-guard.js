@@ -1,6 +1,8 @@
 (() => {
   if (typeof listDriveFiles !== 'function') return;
 
+  let driveRenderGeneration = 0;
+
   function captureDriveSession() {
     if (typeof currentProfile === 'undefined' || !currentProfile) return null;
     return {
@@ -53,12 +55,13 @@
   async function guardedRenderDrive() {
     const session = captureDriveSession();
     if (!session) return;
+    const renderGeneration = ++driveRenderGeneration;
     const panel = document.querySelector('#panel');
     if (!panel) return;
 
     panel.innerHTML = '<div class="panel-title"><div><span class="eyebrow">NUBYX DRIVE</span><h3>Carregando seu espaço privado...</h3></div></div>';
     const files = await guardedListDriveFiles();
-    if (!isSameDriveSession(session)) return;
+    if (!isSameDriveSession(session) || renderGeneration !== driveRenderGeneration) return;
 
     const used = files.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
     const mode = session.mode === 'supabase' ? 'Nuvem privada · RLS por usuário' : 'Demo local · IndexedDB neste dispositivo';
@@ -67,13 +70,13 @@
       <div class="drive-list">${files.length ? files.map(file => `<article class="drive-row"><div class="drive-file-icon">◫</div><div class="drive-file-meta"><b title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</b><small>${escapeHtml(file.mime_type || 'arquivo')} · ${formatBytes(file.size_bytes)}</small></div><button class="ghost" data-drive-open="${file.id}">Abrir</button><button class="ghost danger" data-drive-delete="${file.id}">Remover</button></article>`).join('') : '<div class="drive-empty"><span>◇</span><b>Seu Drive está vazio</b><small>Envie um arquivo para começar. No modo demo ele fica somente neste dispositivo.</small></div>'}</div>`;
 
     panel.querySelector('#driveFileInput')?.addEventListener('change', event => {
-      if (isSameDriveSession(session)) uploadDriveFiles(event.target.files);
+      if (isSameDriveSession(session) && renderGeneration === driveRenderGeneration) uploadDriveFiles(event.target.files);
     });
     panel.querySelectorAll('[data-drive-open]').forEach(button => button.addEventListener('click', () => {
-      if (isSameDriveSession(session)) downloadDriveFile(button.dataset.driveOpen);
+      if (isSameDriveSession(session) && renderGeneration === driveRenderGeneration) downloadDriveFile(button.dataset.driveOpen);
     }));
     panel.querySelectorAll('[data-drive-delete]').forEach(button => button.addEventListener('click', () => {
-      if (isSameDriveSession(session)) deleteDriveFile(button.dataset.driveDelete);
+      if (isSameDriveSession(session) && renderGeneration === driveRenderGeneration) deleteDriveFile(button.dataset.driveDelete);
     }));
   }
 
