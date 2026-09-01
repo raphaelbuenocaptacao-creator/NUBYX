@@ -4,7 +4,30 @@
   const secureContext = window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   if (!secureContext) return;
 
+  const UPDATE_COOLDOWN_MS = 60_000;
   let registrationRef = null;
+  let updatePromise = null;
+  let lastUpdateStartedAt = 0;
+
+  function updateRegistration({ force = false } = {}) {
+    if (!registrationRef) return Promise.resolve(null);
+    if (updatePromise) return updatePromise;
+
+    const now = Date.now();
+    if (!force && now - lastUpdateStartedAt < UPDATE_COOLDOWN_MS) return Promise.resolve(registrationRef);
+
+    lastUpdateStartedAt = now;
+    updatePromise = registrationRef.update()
+      .catch((error) => {
+        console.warn('NUBYX service worker update check failed', error);
+        return null;
+      })
+      .finally(() => {
+        updatePromise = null;
+      });
+
+    return updatePromise;
+  }
 
   async function registerNubyxWorker() {
     try {
@@ -13,7 +36,7 @@
         updateViaCache: 'none'
       });
       registrationRef = registration;
-      await registration.update().catch(() => {});
+      await updateRegistration({ force: true });
       return registration;
     } catch (error) {
       console.warn('NUBYX service worker registration failed', error);
@@ -23,7 +46,7 @@
 
   function refreshRegistration() {
     if (document.visibilityState !== 'visible') return;
-    registrationRef?.update().catch(() => {});
+    void updateRegistration();
   }
 
   window.addEventListener('load', registerNubyxWorker, { once: true });
