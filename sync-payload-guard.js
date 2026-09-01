@@ -47,6 +47,15 @@
     return { ok: true, bytes };
   }
 
+  if(!window.NUBYX_SYNC_PAYLOAD_INSPECT){
+    Object.defineProperty(window, 'NUBYX_SYNC_PAYLOAD_INSPECT', {
+      value: inspectPayload,
+      configurable: false,
+      writable: false,
+      enumerable: false
+    });
+  }
+
   function install(){
     const continuity = window.NUBYX_CONTINUITY;
     if(!continuity || continuity.__payloadLimitInstalled || typeof continuity.publish !== 'function') return false;
