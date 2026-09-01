@@ -1,5 +1,6 @@
 (() => {
   const MAX_APP_URL_LENGTH = 2048;
+  const MAX_RENDERED_APPS = 200;
   let refreshGeneration = 0;
 
   function safeHttpsUrl(value) {
@@ -56,6 +57,17 @@
     return appKey ? `key:${appKey}` : `url:${safeUrl}`;
   }
 
+  function normalizeInstalledApps(value) {
+    if (!Array.isArray(value)) {
+      console.warn('NUBYX launcher ignored an invalid installed-app payload.');
+      return [];
+    }
+    if (value.length > MAX_RENDERED_APPS) {
+      console.warn(`NUBYX launcher limited rendering to ${MAX_RENDERED_APPS} apps.`);
+    }
+    return value.slice(0, MAX_RENDERED_APPS);
+  }
+
   async function refreshLauncher() {
     const grid = document.querySelector('#launcherGrid');
     if (!grid || typeof listInstalledApps !== 'function') return;
@@ -71,7 +83,7 @@
 
     let installed = [];
     try {
-      installed = await listInstalledApps();
+      installed = normalizeInstalledApps(await listInstalledApps());
     } catch (error) {
       if (generation !== refreshGeneration) return;
       console.warn('NUBYX launcher could not load installed apps.', error);
@@ -87,7 +99,8 @@
 
     const renderedApps = new Set();
     installed.forEach(app => {
-      const url = safeHttpsUrl(app?.app_url);
+      if (!app || typeof app !== 'object') return;
+      const url = safeHttpsUrl(app.app_url);
       if (!url) return;
 
       const identity = launcherIdentity(app, url);
@@ -96,9 +109,9 @@
 
       const button = document.createElement('button');
       button.className = 'installed-app';
-      button.dataset.installedApp = app.app_key || 'web-app';
+      button.dataset.installedApp = typeof app.app_key === 'string' && app.app_key ? app.app_key.slice(0, 80) : 'web-app';
       button.type = 'button';
-      button.setAttribute('aria-label', `Abrir ${app.app_name || 'aplicativo'}`);
+      button.setAttribute('aria-label', `Abrir ${String(app.app_name || 'aplicativo').slice(0, 80)}`);
 
       const icon = document.createElement('span');
       icon.textContent = String(app.icon || '◎').slice(0, 4);
@@ -136,6 +149,7 @@
     refresh: refreshLauncher,
     clearSessionApps: invalidateLauncher,
     captureSession,
-    isSameSession
+    isSameSession,
+    maxRenderedApps: MAX_RENDERED_APPS
   });
 })();
