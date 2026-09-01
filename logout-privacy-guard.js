@@ -4,6 +4,8 @@
 
   const CHANNEL_NAME = 'nubyx-session';
   const STORAGE_KEY = 'nubyx_session_signal';
+  const MAX_SIGNAL_AGE_MS = 15 * 1000;
+  const MAX_CLOCK_SKEW_MS = 5 * 1000;
   const tabId = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   const channel = 'BroadcastChannel' in window ? new BroadcastChannel(CHANNEL_NAME) : null;
   let applyingRemoteSignal = false;
@@ -64,8 +66,15 @@
     } catch (_) {}
   }
 
+  function isFreshSessionSignal(message) {
+    const timestamp = Number(message?.ts);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return false;
+    const age = Date.now() - timestamp;
+    return age >= -MAX_CLOCK_SKEW_MS && age <= MAX_SIGNAL_AGE_MS;
+  }
+
   function isMatchingSession(message, profile) {
-    if (!message || message.type !== 'session-ended') return false;
+    if (!message || message.type !== 'session-ended' || !isFreshSessionSignal(message)) return false;
     if (message.tabId === tabId || applyingRemoteSignal) return false;
 
     const currentUserId = profile?.userId || null;
