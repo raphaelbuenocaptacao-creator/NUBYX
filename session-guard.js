@@ -6,11 +6,21 @@
   let subscribed = false;
   let surfacesWrapped = false;
   let lastActivityAt = Date.now();
+  let lastObservedSessionKey = 'none';
   let idleLockInProgress = false;
 
   function sessionKey() {
     if (typeof currentProfile === 'undefined' || !currentProfile) return 'none';
     return `${currentProfile.mode || 'unknown'}:${currentProfile.userId || currentProfile.email || 'anonymous'}`;
+  }
+
+  function syncSessionActivityBoundary() {
+    const activeSessionKey = sessionKey();
+    if (activeSessionKey !== lastObservedSessionKey) {
+      lastObservedSessionKey = activeSessionKey;
+      lastActivityAt = Date.now();
+    }
+    return activeSessionKey;
   }
 
   function scrubPrivateWorkspace() {
@@ -74,6 +84,7 @@
 
     currentProfile = null;
     localStorage.removeItem('nubyx_demo_session');
+    syncSessionActivityBoundary();
     scrubPrivateWorkspace();
     showAuthShell('Sua sessão NUBYX ID terminou. Entre novamente para acessar seus dados.');
 
@@ -100,6 +111,7 @@
       dispatchSessionEnded(profile.userId || null, reason);
       localStorage.removeItem('nubyx_demo_session');
       currentProfile = null;
+      syncSessionActivityBoundary();
       scrubPrivateWorkspace();
       showAuthShell('Ambiente bloqueado após 30 minutos sem atividade. Entre novamente para continuar.');
       if (typeof showToast === 'function') showToast(reason);
@@ -109,24 +121,25 @@
   }
 
   function noteActivity() {
+    syncSessionActivityBoundary();
     if (typeof currentProfile !== 'undefined' && currentProfile) lastActivityAt = Date.now();
   }
 
   function checkIdleSession() {
-    if (typeof currentProfile === 'undefined' || !currentProfile) {
-      lastActivityAt = Date.now();
-      return;
-    }
+    syncSessionActivityBoundary();
+    if (typeof currentProfile === 'undefined' || !currentProfile) return;
     if (Date.now() - lastActivityAt >= IDLE_TIMEOUT_MS) lockInactiveSession();
   }
 
   function attachGuard() {
     wrapPrivateSurfaces();
+    syncSessionActivityBoundary();
     if (subscribed || typeof supabaseClient === 'undefined' || !supabaseClient?.auth?.onAuthStateChange) return;
     subscribed = true;
 
     supabaseClient.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
+        syncSessionActivityBoundary();
         lastActivityAt = Date.now();
         return;
       }
