@@ -77,6 +77,82 @@
     }));
   }
 
+  async function guardedUploadDriveFiles(fileList) {
+    const session = captureDriveSession();
+    if (!session || !fileList?.length) return;
+    const files = [...fileList];
+
+    for (const file of files) {
+      if (!isSameDriveSession(session)) return;
+      if (file.size > DRIVE_MAX_FILE_BYTES) {
+        if (typeof showToast === 'function') showToast(`${file.name}: limite de 25 MB.`);
+        continue;
+      }
+
+      const id = crypto.randomUUID();
+      if (session.mode === 'supabase' && typeof supabaseClient !== 'undefined' && supabaseClient) {
+        if (!session.userId) return;
+        const path = `${session.userId}/${id}-${safeStorageName(file.name)}`;
+        const { error: uploadError } = await supabaseClient.storage
+          .from(DRIVE_BUCKET)
+          .upload(path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
+
+        if (uploadError) {
+          console.error(uploadError);
+          if (isSameDriveSession(session) && typeof showToast === 'function') showToast(`Falha ao enviar ${file.name}.`);
+          continue;
+        }
+
+        if (!isSameDriveSession(session)) {
+          await supabaseClient.storage.from(DRIVE_BUCKET).remove([path]);
+          return;
+        }
+
+        const { error: metaError } = await supabaseClient.from('files_meta').insert({
+          id,
+          user_id: session.userId,
+          storage_path: path,
+          name: file.name,
+          mime_type: file.type || null,
+          size_bytes: file.size,
+          folder: '/'
+        });
+
+        if (metaError) {
+          console.error(metaError);
+          await supabaseClient.storage.from(DRIVE_BUCKET).remove([path]);
+          if (isSameDriveSession(session) && typeof showToast === 'function') showToast(`Falha ao registrar ${file.name}; upload revertido.`);
+          continue;
+        }
+
+        if (!isSameDriveSession(session)) return;
+      } else {
+        try {
+          await demoDriveAction('put', {
+            id,
+            name: file.name,
+            mime_type: file.type || null,
+            size_bytes: file.size,
+            created_at: new Date().toISOString(),
+            blob: file
+          });
+          if (!isSameDriveSession(session)) {
+            await demoDriveAction('delete', id);
+            return;
+          }
+        } catch (error) {
+          console.error(error);
+          if (isSameDriveSession(session) && typeof showToast === 'function') showToast(`Falha ao salvar ${file.name} localmente.`);
+          continue;
+        }
+      }
+    }
+
+    if (!isSameDriveSession(session)) return;
+    if (typeof showToast === 'function') showToast('NUBYX Drive atualizado');
+    guardedRenderDrive();
+  }
+
   async function guardedDownloadDriveFile(id) {
     const session = captureDriveSession();
     if (!session) return;
@@ -142,6 +218,7 @@
 
   listDriveFiles = guardedListDriveFiles;
   if (typeof renderDrive === 'function') renderDrive = guardedRenderDrive;
+  if (typeof uploadDriveFiles === 'function') uploadDriveFiles = guardedUploadDriveFiles;
   if (typeof downloadDriveFile === 'function') downloadDriveFile = guardedDownloadDriveFile;
   if (typeof deleteDriveFile === 'function') deleteDriveFile = guardedDeleteDriveFile;
 
