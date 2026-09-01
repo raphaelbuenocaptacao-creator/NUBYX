@@ -111,10 +111,19 @@
     await withStore('readwrite', store => store.delete(id));
   }
 
+  async function removeMany(ids){
+    const uniqueIds = [...new Set((ids || []).filter(id => id != null))];
+    if(!uniqueIds.length) return 0;
+    await withStore('readwrite', store => {
+      for(const id of uniqueIds) store.delete(id);
+    });
+    return uniqueIds.length;
+  }
+
   async function purgeUser(userId){
     if(!userId) return 0;
     const rows = await listForUser(userId);
-    for(const row of rows) await remove(row.id);
+    await removeMany(rows.map(row => row.id));
     if(rows.length){
       window.dispatchEvent(new CustomEvent('nubyx:sync-queue-purged', { detail: { count: rows.length } }));
     }
@@ -157,7 +166,7 @@
     const expired = rows.filter(row => now - row.created_at > MAX_AGE_MS);
     const active = rows.filter(row => now - row.created_at <= MAX_AGE_MS);
     const overflow = active.slice(0, Math.max(0, active.length - MAX_QUEUE_PER_USER));
-    for(const row of [...expired, ...overflow]) await remove(row.id);
+    await removeMany([...expired, ...overflow].map(row => row.id));
   }
 
   function sessionStillMatches(userId, generation){
