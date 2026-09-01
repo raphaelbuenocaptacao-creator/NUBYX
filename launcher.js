@@ -12,6 +12,22 @@
     }
   }
 
+  function captureSession() {
+    if (typeof currentProfile === 'undefined' || !currentProfile) return null;
+    return {
+      mode: currentProfile.mode || 'unknown',
+      userId: currentProfile.userId || null,
+      email: currentProfile.email || null
+    };
+  }
+
+  function isSameSession(snapshot) {
+    if (!snapshot || typeof currentProfile === 'undefined' || !currentProfile) return false;
+    return (currentProfile.mode || 'unknown') === snapshot.mode &&
+      (currentProfile.userId || null) === snapshot.userId &&
+      (currentProfile.email || null) === snapshot.email;
+  }
+
   function syncLauncherCount(grid) {
     if (!grid) return;
     const total = grid.querySelectorAll(':scope > button').length;
@@ -33,7 +49,12 @@
     const grid = document.querySelector('#launcherGrid');
     if (!grid || typeof listInstalledApps !== 'function') return;
 
-    const profileAtStart = typeof currentProfile === 'undefined' ? null : currentProfile;
+    const session = captureSession();
+    if (!session) {
+      clearSessionApps();
+      return;
+    }
+
     grid.querySelectorAll('[data-installed-app]').forEach(node => node.remove());
 
     let installed = [];
@@ -41,11 +62,11 @@
       installed = await listInstalledApps();
     } catch (error) {
       console.warn('NUBYX launcher could not load installed apps.', error);
-      syncLauncherCount(grid);
+      if (isSameSession(session)) syncLauncherCount(grid);
       return;
     }
 
-    if ((typeof currentProfile === 'undefined' ? null : currentProfile) !== profileAtStart) {
+    if (!isSameSession(session)) {
       clearSessionApps();
       return;
     }
@@ -68,6 +89,11 @@
 
       button.append(icon, label);
       button.addEventListener('click', () => {
+        if (!isSameSession(session)) {
+          clearSessionApps();
+          if (typeof showToast === 'function') showToast('Sua sessão mudou. Atualize o launcher.');
+          return;
+        }
         const opened = window.open(url, '_blank', 'noopener,noreferrer');
         if (!opened && typeof showToast === 'function') {
           showToast('Permita pop-ups para abrir este app.');
@@ -76,7 +102,7 @@
       grid.appendChild(button);
     });
 
-    syncLauncherCount(grid);
+    if (isSameSession(session)) syncLauncherCount(grid);
   }
 
   const previousRefreshInstalledCount = refreshInstalledCount;
@@ -89,6 +115,8 @@
 
   window.NUBYX_LAUNCHER = Object.freeze({
     refresh: refreshLauncher,
-    clearSessionApps
+    clearSessionApps,
+    captureSession,
+    isSameSession
   });
 })();
