@@ -1,5 +1,5 @@
 const CACHE_PREFIX='nubyx-';
-const CACHE_NAME='nubyx-v0.12.7-drive-render-race-guard';
+const CACHE_NAME='nubyx-v0.12.8-shell-partial-response-guard';
 const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./home-2050.css','./auth-2050.css','./app.js','./identity-runtime.js','./auth-revocation-guard.js','./store-session-guard.js','./store-read-session-guard.js','./store-input-guard.js','./drive-session-guard.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-payload-guard.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./logout-privacy-guard.js','./pwa-launch.js','./pwa-update.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 const RUNTIME_CONFIG_RE=/\/config\.js$/i;
@@ -7,8 +7,9 @@ const SENSITIVE_QUERY_RE=/^(token|access_token|refresh_token|id_token|jwt|passwo
 function hasSensitiveQuery(url){for(const key of url.searchParams.keys())if(SENSITIVE_QUERY_RE.test(key))return true;return false}
 function relativeKey(url){const scopePath=new URL(self.registration.scope).pathname;let path=url.pathname.startsWith(scopePath)?url.pathname.slice(scopePath.length):url.pathname;path=path.replace(/^\//,'');return path?`./${path}`:'./'}
 function isAuthenticatedRequest(request){return request.headers.has('authorization')||request.headers.has('cookie')}
-function isAllowedShellRequest(request){if(request.method!=='GET'||isAuthenticatedRequest(request))return false;const url=new URL(request.url);if(url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)||RUNTIME_CONFIG_RE.test(url.pathname)||hasSensitiveQuery(url)||url.search)return false;return STATIC_ASSETS.has(relativeKey(url))}
-function isCacheableResponse(response){if(!response||!response.ok||response.type==='opaque')return false;const cc=(response.headers.get('cache-control')||'').toLowerCase();if(cc.includes('private')||cc.includes('no-store'))return false;if(response.headers.has('set-cookie'))return false;return true}
+function isPartialRequest(request){return request.headers.has('range')||request.headers.has('if-range')}
+function isAllowedShellRequest(request){if(request.method!=='GET'||isAuthenticatedRequest(request)||isPartialRequest(request))return false;const url=new URL(request.url);if(url.origin!==self.location.origin||PRIVATE_PATH_RE.test(url.pathname)||RUNTIME_CONFIG_RE.test(url.pathname)||hasSensitiveQuery(url)||url.search)return false;return STATIC_ASSETS.has(relativeKey(url))}
+function isCacheableResponse(response){if(!response||response.status!==200||response.type==='opaque')return false;const cc=(response.headers.get('cache-control')||'').toLowerCase();if(cc.includes('private')||cc.includes('no-store'))return false;if(response.headers.has('set-cookie')||response.headers.has('content-range'))return false;return true}
 function isTrustedUpdateSource(source){if(!source||source.type!=='window'||!source.url)return false;try{const sourceUrl=new URL(source.url);const scopeUrl=new URL(self.registration.scope);return sourceUrl.origin===scopeUrl.origin&&sourceUrl.pathname.startsWith(scopeUrl.pathname)}catch{return false}}
 async function fetchShellAsset(asset){const request=new Request(asset,{credentials:'omit',cache:'no-store'});const response=await fetch(request);if(!isCacheableResponse(response))throw new Error(`uncacheable:${asset}`);return [request,response]}
 async function precacheShell(){const cache=await caches.open(CACHE_NAME);for(const asset of STATIC_ASSETS){try{const [request,response]=await fetchShellAsset(asset);await cache.put(request,response.clone())}catch{}}
