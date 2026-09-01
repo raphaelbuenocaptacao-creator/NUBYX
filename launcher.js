@@ -51,6 +51,11 @@
     clearSessionApps();
   }
 
+  function launcherIdentity(app, safeUrl) {
+    const appKey = typeof app?.app_key === 'string' ? app.app_key.trim().toLowerCase() : '';
+    return appKey ? `key:${appKey}` : `url:${safeUrl}`;
+  }
+
   async function refreshLauncher() {
     const grid = document.querySelector('#launcherGrid');
     if (!grid || typeof listInstalledApps !== 'function') return;
@@ -80,9 +85,14 @@
       return;
     }
 
+    const renderedApps = new Set();
     installed.forEach(app => {
-      const url = safeHttpsUrl(app.app_url);
+      const url = safeHttpsUrl(app?.app_url);
       if (!url) return;
+
+      const identity = launcherIdentity(app, url);
+      if (renderedApps.has(identity)) return;
+      renderedApps.add(identity);
 
       const button = document.createElement('button');
       button.className = 'installed-app';
