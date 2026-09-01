@@ -1,5 +1,5 @@
 const CACHE_PREFIX='nubyx-';
-const CACHE_NAME='nubyx-v0.11.4-ai-least-privilege-context';
+const CACHE_NAME='nubyx-v0.11.5-launcher-session-identity';
 const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./home-2050.css','./auth-2050.css','./app.js','./identity-runtime.js','./auth-revocation-guard.js','./store-session-guard.js','./store-read-session-guard.js','./store-input-guard.js','./drive-session-guard.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-payload-guard.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./logout-privacy-guard.js','./pwa-launch.js','./pwa-update.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 const RUNTIME_CONFIG_RE=/\/config\.js$/i;
