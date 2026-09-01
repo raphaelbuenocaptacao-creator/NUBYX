@@ -262,6 +262,27 @@
       const userId = currentUserId();
       const generation = sessionGeneration;
       const clientEventKey = options?.clientEventKey || continuity.createEventKey();
+      const inspectPayload = window.NUBYX_SYNC_PAYLOAD_INSPECT;
+      if(typeof inspectPayload === 'function'){
+        const inspection = inspectPayload(payload);
+        if(!inspection.ok){
+          window.dispatchEvent(new CustomEvent('nubyx:sync-payload-rejected', {
+            detail: {
+              channel: channelName,
+              entityKey: String(entityKey || ''),
+              reason: inspection.reason,
+              bytes: inspection.bytes || null
+            }
+          }));
+          return {
+            ok: false,
+            queued: false,
+            reason: inspection.reason,
+            bytes: inspection.bytes || null,
+            clientEventKey
+          };
+        }
+      }
       if(!userId) return publishOnline(channelName, entityKey, eventType, payload, { ...options, clientEventKey });
 
       if(!navigator.onLine){
