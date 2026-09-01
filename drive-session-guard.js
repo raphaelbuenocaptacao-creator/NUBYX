@@ -21,6 +21,24 @@
       (currentProfile.email || null) === snapshot.email;
   }
 
+  function isOwnedDriveStoragePath(storagePath, session) {
+    if (!session?.userId || typeof storagePath !== 'string') return false;
+    const path = storagePath.trim();
+    if (!path || path.includes('\\') || path.startsWith('/') || path.endsWith('/')) return false;
+    const parts = path.split('/');
+    if (parts.length < 2 || parts[0] !== session.userId) return false;
+    return parts.every(part => part && part !== '.' && part !== '..');
+  }
+
+  function rejectForeignDrivePath(file, session, action) {
+    if (isOwnedDriveStoragePath(file?.storage_path, session)) return false;
+    console.warn(`NUBYX Drive blocked ${action}: storage path outside active user namespace.`, file?.id || 'unknown');
+    if (isSameDriveSession(session) && typeof showToast === 'function') {
+      showToast('Arquivo bloqueado por proteção de segurança do NUBYX ID.');
+    }
+    return true;
+  }
+
   async function guardedListDriveFiles() {
     const session = captureDriveSession();
     if (!session) return [];
@@ -96,6 +114,11 @@
       if (session.mode === 'supabase' && typeof supabaseClient !== 'undefined' && supabaseClient) {
         if (!session.userId) return;
         const path = `${session.userId}/${id}-${safeStorageName(file.name)}`;
+        if (!isOwnedDriveStoragePath(path, session)) {
+          console.error('NUBYX Drive refused generated storage path outside active user namespace.');
+          if (typeof showToast === 'function') showToast('Upload bloqueado por proteção de segurança.');
+          continue;
+        }
         const { error: uploadError } = await supabaseClient.storage
           .from(DRIVE_BUCKET)
           .upload(path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
@@ -165,6 +188,7 @@
     if (!file) return showToast('Arquivo não encontrado.');
 
     if (session.mode === 'supabase' && typeof supabaseClient !== 'undefined' && supabaseClient) {
+      if (rejectForeignDrivePath(file, session, 'open')) return;
       const { data, error } = await supabaseClient.storage.from(DRIVE_BUCKET).createSignedUrl(file.storage_path, 60);
       if (!isSameDriveSession(session)) return;
       if (error || !data?.signedUrl) {
@@ -194,6 +218,7 @@
     if (!file) return;
 
     if (session.mode === 'supabase' && typeof supabaseClient !== 'undefined' && supabaseClient) {
+      if (rejectForeignDrivePath(file, session, 'delete')) return;
       const { error: storageError } = await supabaseClient.storage.from(DRIVE_BUCKET).remove([file.storage_path]);
       if (storageError) {
         console.error(storageError);
@@ -225,5 +250,5 @@
   if (typeof downloadDriveFile === 'function') downloadDriveFile = guardedDownloadDriveFile;
   if (typeof deleteDriveFile === 'function') deleteDriveFile = guardedDeleteDriveFile;
 
-  window.NUBYX_DRIVE_SESSION_GUARD = Object.freeze({ captureDriveSession, isSameDriveSession });
+  window.NUBYX_DRIVE_SESSION_GUARD = Object.freeze({ captureDriveSession, isSameDriveSession, isOwnedDriveStoragePath });
 })();
