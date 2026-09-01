@@ -5,6 +5,7 @@
   const MAX_NAME_LENGTH = 80;
   const MAX_URL_LENGTH = 2048;
   const MAX_ICON_LENGTH = 8;
+  const inflightInstalls = new Map();
 
   function normalizeHttpsUrl(value) {
     if (typeof value !== 'string' || !value || value.length > MAX_URL_LENGTH) return null;
@@ -29,18 +30,41 @@
     return Object.freeze({ key, name, url, icon });
   }
 
+  function currentSessionKey() {
+    const guard = window.NUBYX_STORE_SESSION_GUARD;
+    const session = guard?.captureSession?.();
+    if (!session) return 'anonymous';
+    return [session.mode || 'unknown', session.userId || '', session.email || ''].join(':');
+  }
+
   const previousInstallApp = installApp;
-  installApp = async function installValidatedStoreApp(app) {
+  installApp = function installValidatedStoreApp(app) {
     const safeApp = normalizeStoreApp(app);
     if (!safeApp) {
       if (typeof showToast === 'function') showToast('Este app não passou pela validação de segurança da Store.');
-      return;
+      return Promise.resolve();
     }
-    return previousInstallApp(safeApp);
+
+    const operationKey = `${currentSessionKey()}::${safeApp.key}`;
+    const active = inflightInstalls.get(operationKey);
+    if (active) {
+      if (typeof showToast === 'function') showToast('Instalação já em andamento.');
+      return active;
+    }
+
+    const task = Promise.resolve()
+      .then(() => previousInstallApp(safeApp))
+      .finally(() => {
+        if (inflightInstalls.get(operationKey) === task) inflightInstalls.delete(operationKey);
+      });
+
+    inflightInstalls.set(operationKey, task);
+    return task;
   };
 
   window.NUBYX_STORE_INPUT_GUARD = Object.freeze({
     normalizeStoreApp,
-    normalizeHttpsUrl
+    normalizeHttpsUrl,
+    pendingInstallCount: () => inflightInstalls.size
   });
 })();
