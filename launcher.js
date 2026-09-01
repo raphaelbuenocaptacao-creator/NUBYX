@@ -1,5 +1,6 @@
 (() => {
   const MAX_APP_URL_LENGTH = 2048;
+  let refreshGeneration = 0;
 
   function safeHttpsUrl(value) {
     if (typeof value !== 'string' || !value || value.length > MAX_APP_URL_LENGTH) return null;
@@ -45,10 +46,16 @@
     syncLauncherCount(grid);
   }
 
+  function invalidateLauncher() {
+    refreshGeneration += 1;
+    clearSessionApps();
+  }
+
   async function refreshLauncher() {
     const grid = document.querySelector('#launcherGrid');
     if (!grid || typeof listInstalledApps !== 'function') return;
 
+    const generation = ++refreshGeneration;
     const session = captureSession();
     if (!session) {
       clearSessionApps();
@@ -61,13 +68,15 @@
     try {
       installed = await listInstalledApps();
     } catch (error) {
+      if (generation !== refreshGeneration) return;
       console.warn('NUBYX launcher could not load installed apps.', error);
       if (isSameSession(session)) syncLauncherCount(grid);
       return;
     }
 
+    if (generation !== refreshGeneration) return;
     if (!isSameSession(session)) {
-      clearSessionApps();
+      invalidateLauncher();
       return;
     }
 
@@ -90,7 +99,7 @@
       button.append(icon, label);
       button.addEventListener('click', () => {
         if (!isSameSession(session)) {
-          clearSessionApps();
+          invalidateLauncher();
           if (typeof showToast === 'function') showToast('Sua sessão mudou. Atualize o launcher.');
           return;
         }
@@ -102,7 +111,7 @@
       grid.appendChild(button);
     });
 
-    if (isSameSession(session)) syncLauncherCount(grid);
+    if (generation === refreshGeneration && isSameSession(session)) syncLauncherCount(grid);
   }
 
   const previousRefreshInstalledCount = refreshInstalledCount;
@@ -111,11 +120,11 @@
     await refreshLauncher();
   };
 
-  window.addEventListener('nubyx:session-ended', clearSessionApps);
+  window.addEventListener('nubyx:session-ended', invalidateLauncher);
 
   window.NUBYX_LAUNCHER = Object.freeze({
     refresh: refreshLauncher,
-    clearSessionApps,
+    clearSessionApps: invalidateLauncher,
     captureSession,
     isSameSession
   });
