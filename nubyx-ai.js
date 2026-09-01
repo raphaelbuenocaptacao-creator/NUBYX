@@ -4,6 +4,8 @@
     { label: 'Abrir Store', hint: 'Ver apps e serviços web', action: () => openModule('store') },
     { label: 'Ver arquivos', hint: 'Pesquisar no NUBYX Drive', action: () => openModule('drive') }
   ];
+  const MAX_QUERY_CHARS = 512;
+  const MAX_SEARCH_TERMS = 8;
 
   let querySequence = 0;
 
@@ -88,8 +90,8 @@
   }
 
   async function runQuery(rawQuery) {
-    const query = normalize(rawQuery);
-    if (!query) return;
+    const raw = String(rawQuery ?? '');
+    if (!raw.trim()) return;
 
     const sequence = ++querySequence;
     const fingerprint = sessionFingerprint();
@@ -97,6 +99,14 @@
       clearSessionScopedAI();
       return;
     }
+
+    if (raw.length > MAX_QUERY_CHARS) {
+      renderAnswer('Comando muito longo', `Para manter o NUBYX AI rápido e seguro, use até ${MAX_QUERY_CHARS} caracteres por comando.`);
+      return;
+    }
+
+    const query = normalize(raw);
+    if (!query) return;
 
     if (query.includes('abrir drive') || query === 'drive') {
       renderAnswer('Abrindo o Drive', 'Vou levar você ao seu espaço privado de arquivos.');
@@ -130,7 +140,9 @@
       }
       if (!isFreshQuery(sequence, fingerprint)) return;
 
-      const terms = query.split(/\s+/).filter((term) => term.length > 2 && !['arquivo','arquivos','documento','documentos','mostrar','buscar','procure','meus'].includes(term));
+      const terms = query.split(/\s+/)
+        .filter((term) => term.length > 2 && !['arquivo','arquivos','documento','documentos','mostrar','buscar','procure','meus'].includes(term))
+        .slice(0, MAX_SEARCH_TERMS);
       const matches = files.filter((file) => {
         const haystack = normalize(`${file.name || ''} ${file.mime_type || ''}`);
         return terms.length ? terms.every((term) => haystack.includes(term)) : true;
@@ -185,7 +197,7 @@
     panel.innerHTML = `
       <div class="panel-title ai-title"><div><span class="eyebrow">NUBYX AI</span><h3>Comando central do seu ambiente</h3><small>Assistente local seguro · nenhuma ação destrutiva automática</small></div><span class="ai-status">● LOCAL CORE</span></div>
       <div class="ai-shell">
-        <form id="aiForm" class="ai-command"><span>✦</span><input id="aiInput" autocomplete="off" placeholder="Ex.: mostrar meus arquivos, abrir Store, estado de segurança" aria-label="Comando para NUBYX AI"><button class="primary" type="submit">Executar</button></form>
+        <form id="aiForm" class="ai-command"><span>✦</span><input id="aiInput" maxlength="${MAX_QUERY_CHARS}" autocomplete="off" placeholder="Ex.: mostrar meus arquivos, abrir Store, estado de segurança" aria-label="Comando para NUBYX AI"><button class="primary" type="submit">Executar</button></form>
         <div class="ai-suggestions">${AI_COMMANDS.map((command) => `<button type="button" data-ai-command="${aiEscape(command.label)}"><b>${aiEscape(command.label)}</b><small>${aiEscape(command.hint)}</small></button>`).join('')}</div>
         <section id="aiAnswer" class="ai-answer"><div class="ai-answer-head"><span>✦</span><div><b>NUBYX AI pronto</b><small>Camada local de inteligência</small></div></div><p>Posso pesquisar arquivos, conferir apps, abrir módulos e explicar o estado de segurança sem enviar seus dados para um modelo externo.</p></section>
       </div>`;
