@@ -13,6 +13,17 @@
     }
   }
 
+  function isSafeSupabaseEndpoint(value) {
+    if (!isSecureHttpEndpoint(value)) return false;
+    try {
+      const url = new URL(value.trim());
+      const normalizedPath = url.pathname.replace(/\/+$/, '') || '/';
+      return normalizedPath === '/' && !url.search && !url.hash;
+    } catch {
+      return false;
+    }
+  }
+
   function isSafeProjectId(value) {
     return typeof value === 'string' && /^[a-z0-9][a-z0-9_-]{1,63}$/i.test(value.trim());
   }
@@ -39,7 +50,7 @@
     return readLegacyJwtRole(key) === 'anon';
   }
 
-  const validSupabaseUrl = isSecureHttpEndpoint(config.supabaseUrl);
+  const validSupabaseUrl = isSafeSupabaseEndpoint(config.supabaseUrl);
   const validAureonBaseUrl = isSecureHttpEndpoint(config.aureonBaseUrl);
   const validProjectId = isSafeProjectId(config.aureonProjectId || 'nubyx');
   const browserSafeSupabaseKey = isBrowserSafeSupabaseKey(config.supabaseAnonKey);
@@ -56,6 +67,7 @@
     aureonBaseUrlConfigured: validAureonBaseUrl,
     authConfigured: authReady,
     browserSafeAuthKey: browserSafeSupabaseKey,
+    safeSupabaseEndpoint: validSupabaseUrl,
     aureonReady: requiresAureon ? hasAureonBase : null,
     configurationValid: Boolean(validProjectId && (identityLayer !== 'aureon' || validAureonBaseUrl) && (!config.authEnabled || (validSupabaseUrl && browserSafeSupabaseKey))),
     ready,
@@ -76,6 +88,11 @@
 
     if (config.authEnabled && authProvider === 'supabase' && !browserSafeSupabaseKey) {
       status.textContent = 'A chave de autenticação configurada não é segura para uso no navegador. Use somente uma chave Supabase publishable/anon; login real permanece bloqueado.';
+      return;
+    }
+
+    if (config.authEnabled && authProvider === 'supabase' && !validSupabaseUrl) {
+      status.textContent = 'A URL Supabase configurada não é uma origem HTTPS segura. Remova caminhos, parâmetros ou fragmentos; login real permanece bloqueado.';
       return;
     }
 
