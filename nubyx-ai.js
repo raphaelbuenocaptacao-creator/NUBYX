@@ -6,6 +6,7 @@
   ];
   const MAX_QUERY_CHARS = 512;
   const MAX_SEARCH_TERMS = 8;
+  const MAX_CONTEXT_ITEMS = 500;
 
   let querySequence = 0;
 
@@ -45,14 +46,25 @@
     }, delay);
   }
 
+  function normalizeContext(value, source) {
+    if (!Array.isArray(value)) {
+      console.warn(`NUBYX AI ignored an invalid ${source} context payload.`);
+      return [];
+    }
+    if (value.length > MAX_CONTEXT_ITEMS) {
+      console.warn(`NUBYX AI limited ${source} context to ${MAX_CONTEXT_ITEMS} items.`);
+    }
+    return value.slice(0, MAX_CONTEXT_ITEMS).filter((item) => item && typeof item === 'object');
+  }
+
   async function getDriveContext() {
     if (typeof listDriveFiles !== 'function') return [];
-    return (await listDriveFiles()) || [];
+    return normalizeContext(await listDriveFiles(), 'Drive');
   }
 
   async function getStoreContext() {
     if (typeof listInstalledApps !== 'function') return [];
-    return (await listInstalledApps()) || [];
+    return normalizeContext(await listInstalledApps(), 'Store');
   }
 
   function renderAnswer(title, text, items = [], expectedFingerprint = sessionFingerprint()) {
