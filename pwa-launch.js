@@ -2,15 +2,23 @@
   const ALLOWED_MODULES = new Set(['home', 'drive', 'store', 'ai']);
   const params = new URLSearchParams(window.location.search);
   const requested = String(params.get('open') || '').toLowerCase().trim();
-  if (!ALLOWED_MODULES.has(requested)) return;
-
-  let opened = false;
 
   function clearDeepLink() {
     const url = new URL(window.location.href);
     url.searchParams.delete('open');
     history.replaceState(null, '', url.pathname + url.search + url.hash);
   }
+
+  // The PWA manifest only exposes a small, fixed set of internal destinations.
+  // Strip malformed or unknown launch targets instead of leaving untrusted state
+  // in the address bar for the rest of the session.
+  if (!requested) return;
+  if (!ALLOWED_MODULES.has(requested)) {
+    clearDeepLink();
+    return;
+  }
+
+  let opened = false;
 
   function findTrigger() {
     const controls = Array.from(document.querySelectorAll('[data-open]'));
