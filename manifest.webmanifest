@@ -11,6 +11,9 @@
   "orientation": "any",
   "lang": "pt-BR",
   "categories": ["productivity", "utilities"],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "shortcuts": [
     {"name":"Home","short_name":"Home","description":"Abrir o launcher NUBYX","url":"./?open=home","icons":[{"src":"./icon-192.svg","sizes":"192x192","type":"image/svg+xml"}]},
     {"name":"NUBYX Drive","short_name":"Drive","description":"Abrir seu espaço de arquivos","url":"./?open=drive","icons":[{"src":"./icon-192.svg","sizes":"192x192","type":"image/svg+xml"}]},
