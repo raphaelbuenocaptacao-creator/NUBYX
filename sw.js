@@ -1,5 +1,5 @@
 const CACHE_PREFIX='nubyx-';
-const CACHE_NAME='nubyx-v0.15.9-navigation-response-guard';
+const CACHE_NAME='nubyx-v0.15.10-shell-html-mime-guard';
 const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./home-2050.css','./auth-2050.css','./app.js','./identity-runtime.js','./pwa-register.js','./auth-revocation-guard.js','./store-session-guard.js','./store-read-session-guard.js','./store-input-guard.js','./drive-session-guard.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-payload-guard.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./logout-privacy-guard.js','./pwa-launch.js','./pwa-update.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const REQUIRED_SHELL_ASSETS=new Set(['./index.html','./styles.css','./app.js','./identity-runtime.js','./pwa-register.js','./session-guard.js','./launcher.js','./manifest.webmanifest']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
@@ -7,6 +7,7 @@ const RUNTIME_CONFIG_RE=/\/config\.js$/i;
 const SENSITIVE_QUERY_RE=/^(token|access_token|refresh_token|id_token|jwt|password|passwd|secret|client_secret|session|auth|authorization|api_key|apikey|key|code|credential|credentials|assertion|samlresponse|signature|sig)$/i;
 const HTML_MIME_RE=/\btext\/html\b/i;
 const SHELL_MIME_RULES=[
+  [/\.html$/i,HTML_MIME_RE],
   [/\.js$/i,/\b(?:application|text)\/(?:javascript|ecmascript)\b/i],
   [/\.css$/i,/\btext\/css\b/i],
   [/\.webmanifest$/i,/\b(?:application\/manifest\+json|application\/json)\b/i],
@@ -18,7 +19,7 @@ function isWithinScope(url){const scopeUrl=new URL(self.registration.scope);retu
 function isAuthenticatedRequest(request){return request.headers.has('authorization')||request.headers.has('cookie')}
 function isPartialRequest(request){return request.headers.has('range')||request.headers.has('if-range')}
 function isAllowedShellRequest(request){if(request.method!=='GET'||isAuthenticatedRequest(request)||isPartialRequest(request))return false;const url=new URL(request.url);if(!isWithinScope(url)||PRIVATE_PATH_RE.test(url.pathname)||RUNTIME_CONFIG_RE.test(url.pathname)||hasSensitiveQuery(url)||url.search)return false;return STATIC_ASSETS.has(relativeKey(url))}
-function hasSafeShellMime(responseUrl,response){const contentType=response.headers.get('content-type')||'';for(const [pathRule,mimeRule] of SHELL_MIME_RULES){if(pathRule.test(responseUrl.pathname))return mimeRule.test(contentType)}return true}
+function hasSafeShellMime(responseUrl,response){const contentType=response.headers.get('content-type')||'';if(responseUrl.pathname.endsWith('/'))return HTML_MIME_RE.test(contentType);for(const [pathRule,mimeRule] of SHELL_MIME_RULES){if(pathRule.test(responseUrl.pathname))return mimeRule.test(contentType)}return true}
 function isSafeNavigationResponse(response){if(!response||!response.ok||response.type==='opaque'||response.redirected)return false;let responseUrl;try{responseUrl=new URL(response.url)}catch{return false}return isWithinScope(responseUrl)&&HTML_MIME_RE.test(response.headers.get('content-type')||'')}
 function isCacheableResponse(response){if(!response||response.status!==200||response.type==='opaque'||response.redirected)return false;let responseUrl;try{responseUrl=new URL(response.url)}catch{return false}if(!isWithinScope(responseUrl)||PRIVATE_PATH_RE.test(responseUrl.pathname)||RUNTIME_CONFIG_RE.test(responseUrl.pathname)||hasSensitiveQuery(responseUrl)||responseUrl.search||!hasSafeShellMime(responseUrl,response))return false;const cc=(response.headers.get('cache-control')||'').toLowerCase();if(cc.includes('private')||cc.includes('no-store'))return false;if(response.headers.has('set-cookie')||response.headers.has('content-range'))return false;return true}
 function isTrustedUpdateSource(source){if(!source||source.type!=='window'||!source.url)return false;try{return isWithinScope(new URL(source.url))}catch{return false}}
