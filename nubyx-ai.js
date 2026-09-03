@@ -78,16 +78,28 @@
       <div class="ai-answer-head"><span>✦</span><div><b>${aiEscape(title)}</b><small>NUBYX AI · processamento local</small></div></div>
       <p>${aiEscape(text)}</p>
       ${items.length ? `<div class="ai-results">${items.map((item) => `
-        <button class="ai-result" data-ai-target="${aiEscape(item.target || '')}">
+        <button class="ai-result" data-ai-target="${aiEscape(item.target || '')}" data-ai-resource-id="${aiEscape(item.resourceId || '')}">
           <span>${aiEscape(item.icon || '◇')}</span><div><b>${aiEscape(item.title)}</b><small>${aiEscape(item.subtitle || '')}</small></div>
         </button>`).join('')}</div>` : ''}`;
 
     answer.querySelectorAll('[data-ai-target]').forEach((button) => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', async () => {
         if (expectedFingerprint !== sessionFingerprint() || !hasActiveSession(expectedFingerprint)) return;
         const target = button.dataset.aiTarget;
         if (target === 'drive') openModule('drive');
         if (target === 'store') openModule('store');
+        if (target === 'drive-file') {
+          const resourceId = button.dataset.aiResourceId || '';
+          if (!resourceId || typeof downloadDriveFile !== 'function') return;
+          button.disabled = true;
+          try {
+            if (expectedFingerprint === sessionFingerprint() && hasActiveSession(expectedFingerprint)) {
+              await downloadDriveFile(resourceId);
+            }
+          } finally {
+            if (expectedFingerprint === sessionFingerprint()) button.disabled = false;
+          }
+        }
       });
     });
   }
@@ -168,8 +180,8 @@
         return;
       }
 
-      respond('Arquivos encontrados', `Encontrei ${matches.length} resultado${matches.length === 1 ? '' : 's'} no seu Drive.`, matches.map((file) => ({
-        icon: '◫', title: file.name || 'Arquivo', subtitle: file.mime_type || 'arquivo', target: 'drive'
+      respond('Arquivos encontrados', `Encontrei ${matches.length} resultado${matches.length === 1 ? '' : 's'} no seu Drive. Toque em um resultado para abrir o arquivo com o fluxo seguro do NUBYX Drive.`, matches.map((file) => ({
+        icon: '◫', title: file.name || 'Arquivo', subtitle: `${file.mime_type || 'arquivo'} · abrir com segurança`, target: 'drive-file', resourceId: file.id || ''
       })));
       return;
     }
