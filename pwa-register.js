@@ -7,6 +7,7 @@
   const UPDATE_COOLDOWN_MS = 60_000;
   const WORKER_PATH = './sw.js';
   const WORKER_SCOPE = './';
+  const EXPECTED_WORKER_URL = new URL(WORKER_PATH, document.baseURI);
   let registrationRef = null;
   let registrationPromise = null;
   let updatePromise = null;
@@ -36,7 +37,9 @@
     const worker = registration?.installing || registration?.waiting || registration?.active;
     if (!worker?.scriptURL) return false;
     try {
-      return new URL(worker.scriptURL).pathname.endsWith('/sw.js');
+      const scriptUrl = new URL(worker.scriptURL);
+      return scriptUrl.origin === EXPECTED_WORKER_URL.origin
+        && scriptUrl.pathname === EXPECTED_WORKER_URL.pathname;
     } catch {
       return false;
     }
