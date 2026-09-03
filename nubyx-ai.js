@@ -7,6 +7,7 @@
   const MAX_QUERY_CHARS = 512;
   const MAX_SEARCH_TERMS = 8;
   const MAX_CONTEXT_ITEMS = 500;
+  const CONTEXT_TIMEOUT_MS = 7000;
 
   let querySequence = 0;
 
@@ -57,14 +58,22 @@
     return value.slice(0, MAX_CONTEXT_ITEMS).filter((item) => item && typeof item === 'object');
   }
 
+  function withContextTimeout(promise, source) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${source}_context_timeout`)), CONTEXT_TIMEOUT_MS);
+    });
+    return Promise.race([Promise.resolve(promise), timeout]).finally(() => clearTimeout(timer));
+  }
+
   async function getDriveContext() {
     if (typeof listDriveFiles !== 'function') return [];
-    return normalizeContext(await listDriveFiles(), 'Drive');
+    return normalizeContext(await withContextTimeout(listDriveFiles(), 'drive'), 'Drive');
   }
 
   async function getStoreContext() {
     if (typeof listInstalledApps !== 'function') return [];
-    return normalizeContext(await listInstalledApps(), 'Store');
+    return normalizeContext(await withContextTimeout(listInstalledApps(), 'store'), 'Store');
   }
 
   function renderAnswer(title, text, items = [], expectedFingerprint = sessionFingerprint()) {
