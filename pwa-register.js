@@ -8,6 +8,7 @@
   const WORKER_PATH = './sw.js';
   const WORKER_SCOPE = './';
   const EXPECTED_WORKER_URL = new URL(WORKER_PATH, document.baseURI);
+  const EXPECTED_SCOPE_URL = new URL(WORKER_SCOPE, document.baseURI);
   let registrationRef = null;
   let registrationPromise = null;
   let updatePromise = null;
@@ -35,11 +36,14 @@
 
   function isNubyxRegistration(registration) {
     const worker = registration?.installing || registration?.waiting || registration?.active;
-    if (!worker?.scriptURL) return false;
+    if (!worker?.scriptURL || !registration?.scope) return false;
     try {
       const scriptUrl = new URL(worker.scriptURL);
+      const scopeUrl = new URL(registration.scope);
       return scriptUrl.origin === EXPECTED_WORKER_URL.origin
-        && scriptUrl.pathname === EXPECTED_WORKER_URL.pathname;
+        && scriptUrl.pathname === EXPECTED_WORKER_URL.pathname
+        && scopeUrl.origin === EXPECTED_SCOPE_URL.origin
+        && scopeUrl.pathname === EXPECTED_SCOPE_URL.pathname;
     } catch {
       return false;
     }
