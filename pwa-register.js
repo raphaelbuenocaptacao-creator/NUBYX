@@ -9,6 +9,7 @@
   const WORKER_SCOPE = './';
   const EXPECTED_WORKER_URL = new URL(WORKER_PATH, document.baseURI);
   const EXPECTED_SCOPE_URL = new URL(WORKER_SCOPE, document.baseURI);
+  const nativeRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
   let registrationRef = null;
   let registrationPromise = null;
   let updatePromise = null;
@@ -57,7 +58,7 @@
         const existing = await navigator.serviceWorker.getRegistration(WORKER_SCOPE);
         const registration = existing && isNubyxRegistration(existing)
           ? existing
-          : await navigator.serviceWorker.register(WORKER_PATH, {
+          : await nativeRegister(WORKER_PATH, {
               scope: WORKER_SCOPE,
               updateViaCache: 'none'
             });
@@ -75,6 +76,24 @@
 
     return registrationPromise;
   }
+
+  function isExpectedRegistrationRequest(scriptURL, options = {}) {
+    try {
+      const scriptUrl = new URL(String(scriptURL), document.baseURI);
+      const scopeUrl = new URL(options.scope || WORKER_SCOPE, document.baseURI);
+      return scriptUrl.origin === EXPECTED_WORKER_URL.origin
+        && scriptUrl.pathname === EXPECTED_WORKER_URL.pathname
+        && scopeUrl.origin === EXPECTED_SCOPE_URL.origin
+        && scopeUrl.pathname === EXPECTED_SCOPE_URL.pathname;
+    } catch {
+      return false;
+    }
+  }
+
+  navigator.serviceWorker.register = (scriptURL, options) => {
+    if (isExpectedRegistrationRequest(scriptURL, options)) return registerNubyxWorker();
+    return nativeRegister(scriptURL, options);
+  };
 
   function refreshRegistration() {
     if (document.visibilityState !== 'visible') return;
