@@ -32,7 +32,20 @@
 
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(OUTBOX_DB);
-      request.onerror = () => reject(request.error || new Error('Unable to inspect NUBYX outbox'));
+      let missingDatabase = false;
+
+      request.onupgradeneeded = (event) => {
+        if (event.oldVersion !== 0) return;
+        missingDatabase = true;
+        request.transaction?.abort();
+      };
+      request.onerror = () => {
+        if (missingDatabase && request.error?.name === 'AbortError') {
+          resolve(0);
+          return;
+        }
+        reject(request.error || new Error('Unable to inspect NUBYX outbox'));
+      };
       request.onsuccess = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains(OUTBOX_STORE)) {
