@@ -2,6 +2,7 @@
   const MAX_SYNC_PAYLOAD_BYTES = 64 * 1024;
   const MAX_SYNC_PAYLOAD_DEPTH = 32;
   const MAX_SYNC_PAYLOAD_NODES = 4096;
+  const BLOCKED_SYNC_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
   const encoder = new TextEncoder();
 
   function inspectPayload(payload){
@@ -24,6 +25,9 @@
       if(nodes > MAX_SYNC_PAYLOAD_NODES) return { ok: false, reason: 'payload_too_complex' };
 
       for(const key of Object.keys(value)){
+        if(BLOCKED_SYNC_KEYS.has(key)){
+          return { ok: false, reason: 'payload_unsafe_key' };
+        }
         const child = value[key];
         if(typeof child === 'bigint' || typeof child === 'function' || typeof child === 'symbol'){
           return { ok: false, reason: 'payload_not_json_safe' };
