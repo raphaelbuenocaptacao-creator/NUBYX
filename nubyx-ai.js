@@ -32,11 +32,11 @@
       const stableUserId = profile.userId || profile.id || profile.user_id || '';
 
       // Real cloud sessions must be bound to an immutable account identifier.
-      // Never fall back to email: it is mutable and may be reused across session transitions.
+      // Never fall back to email for Supabase: it is mutable and may be reused across session transitions.
       if (mode === 'supabase' && !stableUserId) return 'unavailable';
 
-      // Demo/local profiles may not have an Auth UUID, but still need a session-scoped identity.
-      const localIdentity = stableUserId || profile.sessionId || profile.demoId || '';
+      // Demo/local profiles are device-local and currently use a synthetic email identity.
+      const localIdentity = stableUserId || profile.sessionId || profile.demoId || (mode !== 'supabase' ? profile.email : '') || '';
       if (!localIdentity) return 'unavailable';
 
       return `${mode}:${localIdentity}`;
