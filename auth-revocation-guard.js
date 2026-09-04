@@ -1,7 +1,10 @@
 (() => {
   let attempts = 0;
   let unsubscribe = null;
+  let resumeCheckInFlight = false;
+  let lastResumeCheckAt = 0;
   const MAX_ATTEMPTS = 40;
+  const RESUME_CHECK_MIN_INTERVAL_MS = 5000;
 
   function clearPrivateWorkspace(reason = 'auth_state_change') {
     if (typeof currentProfile === 'undefined' || currentProfile?.mode !== 'supabase') return;
@@ -52,6 +55,30 @@
     }
   }
 
+  async function revalidateResumedSession(reason = 'resume') {
+    if (document.visibilityState === 'hidden' || resumeCheckInFlight) return;
+    if (typeof currentProfile === 'undefined' || currentProfile?.mode !== 'supabase') return;
+    if (typeof supabaseClient === 'undefined' || !supabaseClient?.auth?.getSession) return;
+
+    const now = Date.now();
+    if (now - lastResumeCheckAt < RESUME_CHECK_MIN_INTERVAL_MS) return;
+    lastResumeCheckAt = now;
+    resumeCheckInFlight = true;
+
+    try {
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (error) {
+        console.warn('NUBYX: não foi possível revalidar a sessão ao retomar.', error);
+        return;
+      }
+      enforceSessionIdentity(`resume_${reason}`, data?.session || null);
+    } catch (error) {
+      console.warn('NUBYX: falha não destrutiva ao revalidar sessão ao retomar.', error);
+    } finally {
+      resumeCheckInFlight = false;
+    }
+  }
+
   function attachGuard() {
     attempts += 1;
 
@@ -70,6 +97,14 @@
       console.warn('NUBYX: não foi possível ativar a proteção contra sessão revogada.', error);
     }
   }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void revalidateResumedSession('visible');
+  });
+
+  window.addEventListener('pageshow', () => {
+    void revalidateResumedSession('pageshow');
+  });
 
   window.addEventListener('pagehide', () => {
     try { unsubscribe?.(); } catch {}
