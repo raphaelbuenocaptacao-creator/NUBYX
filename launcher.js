@@ -14,19 +14,35 @@
     }
   }
 
+  function normalizedUserId(profile) {
+    return typeof profile?.userId === 'string' && profile.userId.trim()
+      ? profile.userId.trim()
+      : null;
+  }
+
   function captureSession() {
     if (typeof currentProfile === 'undefined' || !currentProfile) return null;
+    const mode = currentProfile.mode || 'unknown';
+    const userId = normalizedUserId(currentProfile);
+
+    // Cloud launcher state must always be bound to a stable NUBYX ID. Demo mode
+    // intentionally has no cloud user id and remains isolated to this device.
+    if (mode === 'supabase' && !userId) return null;
+
     return {
-      mode: currentProfile.mode || 'unknown',
-      userId: currentProfile.userId || null,
+      mode,
+      userId,
       email: currentProfile.email || null
     };
   }
 
   function isSameSession(snapshot) {
     if (!snapshot || typeof currentProfile === 'undefined' || !currentProfile) return false;
-    return (currentProfile.mode || 'unknown') === snapshot.mode &&
-      (currentProfile.userId || null) === snapshot.userId &&
+    const mode = currentProfile.mode || 'unknown';
+    const userId = normalizedUserId(currentProfile);
+    if (mode === 'supabase' && !userId) return false;
+    return mode === snapshot.mode &&
+      userId === snapshot.userId &&
       (currentProfile.email || null) === snapshot.email;
   }
 
