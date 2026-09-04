@@ -6,7 +6,7 @@
   function clearDeepLink() {
     const url = new URL(window.location.href);
     url.searchParams.delete('open');
-    history.replaceState(null, '', url.pathname + url.search + url.hash);
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
   }
 
   // The PWA manifest only exposes a small, fixed set of internal destinations.
