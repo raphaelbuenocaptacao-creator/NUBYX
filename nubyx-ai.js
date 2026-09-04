@@ -27,7 +27,19 @@
     try {
       const profile = typeof currentProfile !== 'undefined' ? currentProfile : null;
       if (!profile) return 'signed-out';
-      return [profile.mode || 'unknown', profile.userId || profile.id || profile.user_id || profile.email || 'session'].join(':');
+
+      const mode = profile.mode || 'unknown';
+      const stableUserId = profile.userId || profile.id || profile.user_id || '';
+
+      // Real cloud sessions must be bound to an immutable account identifier.
+      // Never fall back to email: it is mutable and may be reused across session transitions.
+      if (mode === 'supabase' && !stableUserId) return 'unavailable';
+
+      // Demo/local profiles may not have an Auth UUID, but still need a session-scoped identity.
+      const localIdentity = stableUserId || profile.sessionId || profile.demoId || '';
+      if (!localIdentity) return 'unavailable';
+
+      return `${mode}:${localIdentity}`;
     } catch (_) {
       return 'unavailable';
     }
