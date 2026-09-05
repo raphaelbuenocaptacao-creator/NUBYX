@@ -81,6 +81,57 @@ jobs:
           console.log(`manifest.webmanifest: valid structure; ${referencedAssets.length} referenced assets verified`);
           NODE
 
+      - name: Validate service worker precache integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const source = fs.readFileSync('sw.js', 'utf8');
+
+          function readSet(name) {
+            const match = source.match(new RegExp(`const\\s+${name}\\s*=\\s*new\\s+Set\\s*\\(\\s*\\[([\\s\\S]*?)\\]\\s*\\)`));
+            if (!match) throw new Error(`sw.js: unable to locate ${name}`);
+
+            const values = [];
+            const literal = /(['"])(.*?)\1/g;
+            let item;
+            while ((item = literal.exec(match[1]))) values.push(item[2]);
+            if (!values.length) throw new Error(`sw.js: ${name} is empty or not statically readable`);
+            return values;
+          }
+
+          const staticAssets = readSet('STATIC_ASSETS');
+          const requiredAssets = readSet('REQUIRED_SHELL_ASSETS');
+          const staticSet = new Set(staticAssets);
+          const root = path.resolve('.');
+
+          for (const asset of requiredAssets) {
+            if (!staticSet.has(asset)) {
+              throw new Error(`sw.js: required shell asset is not in STATIC_ASSETS: ${asset}`);
+            }
+          }
+
+          for (const asset of staticAssets) {
+            if (asset === './') continue;
+            if (!asset.startsWith('./')) {
+              throw new Error(`sw.js: precache asset must be repository-relative: ${asset}`);
+            }
+            const normalized = asset.slice(2).split(/[?#]/)[0];
+            const resolved = path.resolve(normalized);
+            if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+              throw new Error(`sw.js: precache asset escapes repository root: ${asset}`);
+            }
+            if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+              throw new Error(`sw.js: precache asset not found: ${asset}`);
+            }
+          }
+
+          console.log(`sw.js: ${staticAssets.length} precache assets verified; ${requiredAssets.length} required assets are covered`);
+          NODE
+
       - name: Verify critical PWA shell files
         shell: bash
         run: |
