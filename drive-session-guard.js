@@ -3,12 +3,22 @@
 
   let driveRenderGeneration = 0;
 
+  function normalizeDriveUserId(value) {
+    if (typeof value !== 'string') return null;
+    const userId = value.trim();
+    if (!userId || userId.length > 128 || /[\\/\u0000-\u001f\u007f]/.test(userId) || userId === '.' || userId === '..') return null;
+    return userId;
+  }
+
   function captureDriveSession() {
     if (typeof currentProfile === 'undefined' || !currentProfile) return null;
+    const mode = currentProfile.mode || 'unknown';
+    const userId = normalizeDriveUserId(currentProfile.userId);
+    if (mode === 'supabase' && !userId) return null;
     return {
       profileRef: currentProfile,
-      mode: currentProfile.mode || 'unknown',
-      userId: currentProfile.userId || null,
+      mode,
+      userId,
       email: currentProfile.email || null
     };
   }
@@ -17,7 +27,7 @@
     if (!snapshot || typeof currentProfile === 'undefined' || !currentProfile) return false;
     return currentProfile === snapshot.profileRef &&
       (currentProfile.mode || 'unknown') === snapshot.mode &&
-      (currentProfile.userId || null) === snapshot.userId &&
+      normalizeDriveUserId(currentProfile.userId) === snapshot.userId &&
       (currentProfile.email || null) === snapshot.email;
   }
 
@@ -44,7 +54,6 @@
     if (!session) return [];
 
     if (session.mode === 'supabase' && typeof supabaseClient !== 'undefined' && supabaseClient) {
-      if (!session.userId) return [];
       const { data, error } = await supabaseClient
         .from('files_meta')
         .select('id,name,mime_type,size_bytes,storage_path,created_at')
@@ -112,7 +121,6 @@
 
       const id = crypto.randomUUID();
       if (session.mode === 'supabase' && typeof supabaseClient !== 'undefined' && supabaseClient) {
-        if (!session.userId) return;
         const path = `${session.userId}/${id}-${safeStorageName(file.name)}`;
         if (!isOwnedDriveStoragePath(path, session)) {
           console.error('NUBYX Drive refused generated storage path outside active user namespace.');
@@ -250,5 +258,5 @@
   if (typeof downloadDriveFile === 'function') downloadDriveFile = guardedDownloadDriveFile;
   if (typeof deleteDriveFile === 'function') deleteDriveFile = guardedDeleteDriveFile;
 
-  window.NUBYX_DRIVE_SESSION_GUARD = Object.freeze({ captureDriveSession, isSameDriveSession, isOwnedDriveStoragePath });
+  window.NUBYX_DRIVE_SESSION_GUARD = Object.freeze({ captureDriveSession, isSameDriveSession, isOwnedDriveStoragePath, normalizeDriveUserId });
 })();
