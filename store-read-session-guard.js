@@ -4,19 +4,35 @@
   let storeRenderGeneration = 0;
   let installedCountGeneration = 0;
 
+  function normalizedUserId(profile) {
+    return typeof profile?.userId === 'string' && profile.userId.trim()
+      ? profile.userId.trim()
+      : null;
+  }
+
   function captureSession() {
     if (typeof currentProfile === 'undefined' || !currentProfile) return null;
+    const mode = currentProfile.mode || 'unknown';
+    const userId = normalizedUserId(currentProfile);
+
+    if (mode === 'supabase' && !userId) return null;
+
     return {
-      mode: currentProfile.mode || 'unknown',
-      userId: currentProfile.userId || null,
+      profileRef: currentProfile,
+      mode,
+      userId,
       email: currentProfile.email || null
     };
   }
 
   function isSameSession(snapshot) {
     if (!snapshot || typeof currentProfile === 'undefined' || !currentProfile) return false;
-    return (currentProfile.mode || 'unknown') === snapshot.mode &&
-      (currentProfile.userId || null) === snapshot.userId &&
+    const mode = currentProfile.mode || 'unknown';
+    const userId = normalizedUserId(currentProfile);
+    if (mode === 'supabase' && !userId) return false;
+    return currentProfile === snapshot.profileRef &&
+      mode === snapshot.mode &&
+      userId === snapshot.userId &&
       (currentProfile.email || null) === snapshot.email;
   }
 
@@ -25,7 +41,6 @@
     if (!session) return [];
 
     if (session.mode === 'supabase' && typeof supabaseClient !== 'undefined' && supabaseClient) {
-      if (!session.userId) return [];
       const { data, error } = await supabaseClient
         .from('user_apps')
         .select('app_key,app_name,app_url,icon,position')
