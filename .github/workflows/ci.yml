@@ -132,6 +132,57 @@ jobs:
           console.log(`sw.js: ${staticAssets.length} precache assets verified; ${requiredAssets.length} required assets are covered`);
           NODE
 
+      - name: Validate index shell dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const html = fs.readFileSync('index.html', 'utf8');
+          const sw = fs.readFileSync('sw.js', 'utf8');
+          const staticMatch = sw.match(/const\s+STATIC_ASSETS\s*=\s*new\s+Set\s*\(\s*\[([\s\S]*?)\]\s*\)/);
+          if (!staticMatch) throw new Error('sw.js: unable to locate STATIC_ASSETS');
+
+          const staticAssets = new Set();
+          const literal = /(['"])(.*?)\1/g;
+          let item;
+          while ((item = literal.exec(staticMatch[1]))) staticAssets.add(item[2]);
+
+          const dependencies = [];
+          const tagPattern = /<(script|link)\b[^>]*?(?:src|href)=["']([^"']+)["'][^>]*>/gi;
+          let tag;
+          while ((tag = tagPattern.exec(html))) {
+            const kind = tag[1].toLowerCase();
+            const value = tag[2];
+            if (/^(https?:|data:|blob:|#)/i.test(value)) continue;
+            const clean = value.replace(/^\.\//, '').split(/[?#]/)[0];
+            if (!clean) continue;
+            dependencies.push({ kind, value, clean, tag: tag[0] });
+          }
+
+          const root = path.resolve('.');
+          for (const dep of dependencies) {
+            const resolved = path.resolve(dep.clean);
+            if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+              throw new Error(`index.html: dependency escapes repository root: ${dep.value}`);
+            }
+            if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+              throw new Error(`index.html: referenced dependency not found: ${dep.value}`);
+            }
+
+            const isScript = dep.kind === 'script';
+            const isStylesheet = dep.kind === 'link' && /\brel=["'][^"']*stylesheet[^"']*["']/i.test(dep.tag);
+            const isRuntimeConfig = dep.clean === 'config.js';
+            if ((isScript || isStylesheet) && !isRuntimeConfig && !staticAssets.has(`./${dep.clean}`)) {
+              throw new Error(`index.html: startup dependency is not precached by sw.js: ${dep.value}`);
+            }
+          }
+
+          console.log(`index.html: ${dependencies.length} local dependencies exist; startup scripts/styles are covered by the offline shell`);
+          NODE
+
       - name: Verify critical PWA shell files
         shell: bash
         run: |
