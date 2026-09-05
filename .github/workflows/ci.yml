@@ -31,7 +31,55 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest', 'utf8')); console.log('manifest.webmanifest: valid JSON')"
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const file = 'manifest.webmanifest';
+          const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const required = ['name', 'short_name', 'start_url', 'scope', 'display', 'icons'];
+
+          for (const key of required) {
+            if (!manifest[key] || (Array.isArray(manifest[key]) && manifest[key].length === 0)) {
+              throw new Error(`manifest.webmanifest: missing required field ${key}`);
+            }
+          }
+
+          if (!Array.isArray(manifest.icons) || manifest.icons.length === 0) {
+            throw new Error('manifest.webmanifest: at least one icon is required');
+          }
+
+          const referencedAssets = [];
+          for (const icon of manifest.icons) {
+            if (!icon.src) throw new Error('manifest.webmanifest: icon without src');
+            referencedAssets.push(icon.src);
+          }
+
+          for (const shortcut of manifest.shortcuts || []) {
+            if (!shortcut.name || !shortcut.url) {
+              throw new Error('manifest.webmanifest: shortcut missing name or url');
+            }
+            for (const icon of shortcut.icons || []) {
+              if (!icon.src) throw new Error(`manifest.webmanifest: shortcut ${shortcut.name} has icon without src`);
+              referencedAssets.push(icon.src);
+            }
+          }
+
+          for (const asset of referencedAssets) {
+            if (/^(https?:|data:)/i.test(asset)) continue;
+            const normalized = asset.replace(/^\.\//, '').split(/[?#]/)[0];
+            const resolved = path.resolve(normalized);
+            const root = path.resolve('.');
+            if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+              throw new Error(`manifest.webmanifest: asset escapes repository root: ${asset}`);
+            }
+            if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+              throw new Error(`manifest.webmanifest: referenced asset not found: ${asset}`);
+            }
+          }
+
+          console.log(`manifest.webmanifest: valid structure; ${referencedAssets.length} referenced assets verified`);
+          NODE
 
       - name: Verify critical PWA shell files
         shell: bash
