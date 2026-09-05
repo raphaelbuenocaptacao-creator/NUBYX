@@ -11,8 +11,15 @@
   let retryTimer = null;
   let retryAttempt = 0;
 
+  function normalizeSyncUserId(value){
+    if(typeof value !== 'string') return null;
+    const userId = value.trim().toLowerCase();
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(userId)) return null;
+    return userId;
+  }
+
   function currentUserId(){
-    const userId = currentProfile?.mode === 'supabase' ? currentProfile?.userId || null : null;
+    const userId = currentProfile?.mode === 'supabase' ? normalizeSyncUserId(currentProfile?.userId) : null;
     if(userId) lastKnownUserId = userId;
     return userId;
   }
@@ -331,7 +338,7 @@
   window.addEventListener('nubyx:session-ended', event => {
     sessionGeneration += 1;
     clearRetry();
-    const userId = event?.detail?.userId || lastKnownUserId || null;
+    const userId = normalizeSyncUserId(event?.detail?.userId) || lastKnownUserId || null;
     lastKnownUserId = null;
     purgeUser(userId).catch(error => console.warn('NUBYX Continuity queue purge failed', error));
   });
