@@ -9,6 +9,12 @@
     history.replaceState(history.state, '', url.pathname + url.search + url.hash);
   }
 
+  function hasStableIdentity() {
+    if (typeof currentProfile === 'undefined' || !currentProfile) return false;
+    if (currentProfile.mode === 'supabase') return Boolean(currentProfile.userId);
+    return true;
+  }
+
   // The PWA manifest only exposes a small, fixed set of internal destinations.
   // Strip malformed or unknown launch targets instead of leaving untrusted state
   // in the address bar for the rest of the session.
@@ -28,18 +34,24 @@
   function tryOpen() {
     if (opened) return true;
     const os = document.querySelector('#os');
-    if (!os || os.classList.contains('hidden')) return false;
+    if (!os || os.classList.contains('hidden') || !hasStableIdentity()) return false;
+
+    const sessionAtLaunch = `${currentProfile.mode || 'unknown'}:${currentProfile.userId || currentProfile.email || 'anonymous'}`;
 
     if (typeof window.openModule === 'function') {
-      opened = true;
       window.openModule(requested);
     } else {
       const trigger = findTrigger();
       if (!trigger) return false;
-      opened = true;
       trigger.click();
     }
 
+    const sessionAfterOpen = typeof currentProfile === 'undefined' || !currentProfile
+      ? 'none'
+      : `${currentProfile.mode || 'unknown'}:${currentProfile.userId || currentProfile.email || 'anonymous'}`;
+    if (sessionAtLaunch !== sessionAfterOpen) return false;
+
+    opened = true;
     if (requested === 'ai' && window.NUBYX_AI && window.NUBYX_AI.render) window.NUBYX_AI.render();
     clearDeepLink();
     return true;
