@@ -2,8 +2,25 @@
   const logout = document.querySelector('#logoutBtn');
   if (!logout) return;
 
-  const CHANNEL_NAME = 'nubyx-session';
-  const STORAGE_KEY = 'nubyx_session_signal';
+  function appScopeNamespace() {
+    try {
+      const baseUrl = new URL(document.baseURI);
+      const normalizedPath = baseUrl.pathname.replace(/\/+$/, '') || '/';
+      const scope = `${baseUrl.origin}${normalizedPath}`;
+      let hash = 2166136261;
+      for (let index = 0; index < scope.length; index += 1) {
+        hash ^= scope.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(36);
+    } catch {
+      return 'default';
+    }
+  }
+
+  const APP_SCOPE = appScopeNamespace();
+  const CHANNEL_NAME = `nubyx-session-${APP_SCOPE}`;
+  const STORAGE_KEY = `nubyx_session_signal_${APP_SCOPE}`;
   const MAX_SIGNAL_AGE_MS = 15 * 1000;
   const MAX_CLOCK_SKEW_MS = 5 * 1000;
   const tabId = crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
@@ -53,6 +70,7 @@
     if (detail?.remote || applyingRemoteSignal) return;
     const message = {
       type: 'session-ended',
+      scope: APP_SCOPE,
       tabId,
       userId: detail?.userId || null,
       mode: detail?.mode || 'unknown',
@@ -74,7 +92,7 @@
   }
 
   function isMatchingSession(message, profile) {
-    if (!message || message.type !== 'session-ended' || !isFreshSessionSignal(message)) return false;
+    if (!message || message.type !== 'session-ended' || message.scope !== APP_SCOPE || !isFreshSessionSignal(message)) return false;
     if (message.tabId === tabId || applyingRemoteSignal) return false;
 
     const currentUserId = profile?.userId || null;
