@@ -1,0 +1,42 @@
+name: NUBYX CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find . -type f -name '*.js' -not -path './node_modules/*' -print0)
+
+      - name: Validate PWA manifest JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8')); console.log('manifest.webmanifest: valid JSON')"
+
+      - name: Verify critical PWA shell files
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in index.html manifest.webmanifest sw.js app.js identity-runtime.js pwa-register.js pwa-update.js; do
+            test -s "$file" || { echo "Missing or empty critical PWA file: $file"; exit 1; }
+          done
