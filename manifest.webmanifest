@@ -11,19 +11,17 @@
   "orientation": "any",
   "lang": "pt-BR",
   "categories": ["productivity", "utilities"],
-  "launch_handler": {
-    "client_mode": "navigate-existing"
-  },
+  "launch_handler": {"client_mode": "navigate-existing"},
   "shortcuts": [
-    {"name":"Home","short_name":"Home","description":"Abrir o launcher NUBYX","url":"./?open=home","icons":[{"src":"./icon-192.svg","sizes":"192x192","type":"image/svg+xml"}]},
-    {"name":"NUBYX Drive","short_name":"Drive","description":"Abrir seu espaço de arquivos","url":"./?open=drive","icons":[{"src":"./icon-192.svg","sizes":"192x192","type":"image/svg+xml"}]},
-    {"name":"NUBYX Store","short_name":"Store","description":"Abrir a loja de apps web","url":"./?open=store","icons":[{"src":"./icon-192.svg","sizes":"192x192","type":"image/svg+xml"}]},
-    {"name":"NUBYX AI","short_name":"AI","description":"Abrir o assistente NUBYX","url":"./?open=ai","icons":[{"src":"./icon-192.svg","sizes":"192x192","type":"image/svg+xml"}]}
+    {"name":"Home","short_name":"Home","description":"Abrir o launcher NUBYX","url":"./?open=home","icons":[{"src":"./icon-192.png","sizes":"192x192","type":"image/png"}]},
+    {"name":"NUBYX Drive","short_name":"Drive","description":"Abrir seu espaço de arquivos","url":"./?open=drive","icons":[{"src":"./icon-192.png","sizes":"192x192","type":"image/png"}]},
+    {"name":"NUBYX Store","short_name":"Store","description":"Abrir a loja de apps web","url":"./?open=store","icons":[{"src":"./icon-192.png","sizes":"192x192","type":"image/png"}]},
+    {"name":"NUBYX AI","short_name":"AI","description":"Abrir o assistente NUBYX","url":"./?open=ai","icons":[{"src":"./icon-192.png","sizes":"192x192","type":"image/png"}]}
   ],
   "icons": [
     {"src":"./icon-180.png","sizes":"180x180","type":"image/png","purpose":"any"},
-    {"src":"./icon-192.svg","sizes":"192x192","type":"image/svg+xml","purpose":"any"},
-    {"src":"./icon-512.svg","sizes":"512x512","type":"image/svg+xml","purpose":"any"},
-    {"src":"./icon-512-maskable.svg","sizes":"512x512","type":"image/svg+xml","purpose":"maskable"}
+    {"src":"./icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"./icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"./icon-512-maskable.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
   ]
 }
