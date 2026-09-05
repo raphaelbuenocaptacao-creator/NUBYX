@@ -29,7 +29,13 @@
           return { ok: false, reason: 'payload_unsafe_key' };
         }
         const child = value[key];
-        if(typeof child === 'bigint' || typeof child === 'function' || typeof child === 'symbol'){
+        if(
+          typeof child === 'undefined' ||
+          typeof child === 'bigint' ||
+          typeof child === 'function' ||
+          typeof child === 'symbol' ||
+          (typeof child === 'number' && !Number.isFinite(child))
+        ){
           return { ok: false, reason: 'payload_not_json_safe' };
         }
         if(child && typeof child === 'object') stack.push({ value: child, depth: depth + 1 });
