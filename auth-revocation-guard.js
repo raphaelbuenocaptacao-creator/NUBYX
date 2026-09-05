@@ -58,7 +58,7 @@
   async function revalidateResumedSession(reason = 'resume') {
     if (document.visibilityState === 'hidden' || resumeCheckInFlight) return;
     if (typeof currentProfile === 'undefined' || currentProfile?.mode !== 'supabase') return;
-    if (typeof supabaseClient === 'undefined' || !supabaseClient?.auth?.getSession) return;
+    if (typeof supabaseClient === 'undefined' || !supabaseClient?.auth?.getUser) return;
 
     const now = Date.now();
     if (now - lastResumeCheckAt < RESUME_CHECK_MIN_INTERVAL_MS) return;
@@ -66,14 +66,26 @@
     resumeCheckInFlight = true;
 
     try {
-      const { data, error } = await supabaseClient.auth.getSession();
-      if (error) {
-        console.warn('NUBYX: não foi possível revalidar a sessão ao retomar.', error);
+      // getUser() validates the access token with Supabase Auth instead of only
+      // trusting the locally persisted session. This catches revoked/expired
+      // server sessions before a resumed PWA keeps private workspace UI open.
+      const { data, error } = await supabaseClient.auth.getUser();
+      const serverUserId = typeof data?.user?.id === 'string' ? data.user.id.trim() : '';
+      const activeUserId = typeof currentProfile?.userId === 'string' ? currentProfile.userId.trim() : '';
+
+      if (error || !serverUserId) {
+        if (error) console.warn('NUBYX: sessão rejeitada ao revalidar no servidor.', error);
+        clearPrivateWorkspace(`server_session_invalid_${reason}`);
         return;
       }
-      enforceSessionIdentity(`resume_${reason}`, data?.session || null);
+
+      if (!activeUserId || activeUserId !== serverUserId) {
+        clearPrivateWorkspace('server_identity_changed');
+      }
     } catch (error) {
-      console.warn('NUBYX: falha não destrutiva ao revalidar sessão ao retomar.', error);
+      // Network/transient failures are non-destructive: authenticated requests
+      // remain protected by Supabase/RLS and the guard retries on a later resume.
+      console.warn('NUBYX: falha não destrutiva ao revalidar sessão no servidor.', error);
     } finally {
       resumeCheckInFlight = false;
     }
