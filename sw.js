@@ -1,6 +1,6 @@
 const CACHE_PREFIX='nubyx-';
-const CACHE_NAME='nubyx-v0.15.18-launch-identity-guard';
-const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./home-2050.css','./auth-2050.css','./app.js','./identity-runtime.js','./pwa-register.js','./auth-revocation-guard.js','./store-session-guard.js','./store-read-session-guard.js','./store-input-guard.js','./drive-session-guard.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-payload-guard.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./logout-privacy-guard.js','./pwa-launch.js','./pwa-update.js','./manifest.webmanifest','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
+const CACHE_NAME='nubyx-v0.15.19-png-install-icon';
+const STATIC_ASSETS=new Set(['./','./index.html','./styles.css','./future.css','./drive.css','./ai.css','./home-2050.css','./auth-2050.css','./app.js','./identity-runtime.js','./pwa-register.js','./auth-revocation-guard.js','./store-session-guard.js','./store-read-session-guard.js','./store-input-guard.js','./drive-session-guard.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-payload-guard.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./logout-privacy-guard.js','./pwa-launch.js','./pwa-update.js','./manifest.webmanifest','./icon-180.png','./icon-192.svg','./icon-512.svg','./icon-512-maskable.svg']);
 const REQUIRED_SHELL_ASSETS=new Set(['./index.html','./styles.css','./app.js','./identity-runtime.js','./pwa-register.js','./pwa-update.js','./auth-revocation-guard.js','./store-session-guard.js','./store-read-session-guard.js','./store-input-guard.js','./drive-session-guard.js','./connectivity.js','./launcher.js','./session-guard.js','./sync-client.js','./sync-payload-guard.js','./sync-offline-queue.js','./sync-ui.js','./nubyx-ai.js','./logout-privacy-guard.js','./pwa-launch.js','./manifest.webmanifest']);
 const PRIVATE_PATH_RE=/\/(api|auth|login|logout|admin|session|sessions|token|tokens|account|profile|me)(\/|$)/i;
 const RUNTIME_CONFIG_RE=/\/config\.js$/i;
@@ -12,7 +12,8 @@ const SHELL_MIME_RULES=[
   [/\.js$/i,/\b(?:application|text)\/(?:javascript|ecmascript)\b/i],
   [/\.css$/i,/\btext\/css\b/i],
   [/\.webmanifest$/i,/\b(?:application\/manifest\+json|application\/json)\b/i],
-  [/\.svg$/i,/\bimage\/svg\+xml\b/i]
+  [/\.svg$/i,/\bimage\/svg\+xml\b/i],
+  [/\.png$/i,/\bimage\/png\b/i]
 ];
 function hasSensitiveQuery(url){for(const key of url.searchParams.keys())if(SENSITIVE_QUERY_RE.test(key))return true;return false}
 function relativeKey(url){const scopePath=new URL(self.registration.scope).pathname;let path=url.pathname.startsWith(scopePath)?url.pathname.slice(scopePath.length):url.pathname;path=path.replace(/^\//,'');return path?`./${path}`:'./'}
