@@ -59,6 +59,7 @@
   const requiresAureon = identityLayer === 'aureon';
   const authReady = Boolean(config.authEnabled && authProvider === 'supabase' && hasSupabase);
   const ready = requiresAureon ? Boolean(authReady && hasAureonBase) : authReady;
+  const failClosed = Boolean(config.authEnabled && !ready);
 
   const state = Object.freeze({
     identityLayer,
@@ -70,9 +71,22 @@
     safeSupabaseEndpoint: validSupabaseUrl,
     aureonReady: requiresAureon ? hasAureonBase : null,
     configurationValid: Boolean(validProjectId && (identityLayer !== 'aureon' || validAureonBaseUrl) && (!config.authEnabled || (validSupabaseUrl && browserSafeSupabaseKey))),
+    failClosed,
     ready,
     mode: ready ? 'cloud' : 'demo-safe'
   });
+
+  // Fail closed before app.js reads runtime configuration. This prevents a
+  // browser-unsafe Supabase key, malformed endpoint, or incomplete AUREON
+  // integration from being used even if authEnabled was accidentally set.
+  if (failClosed) {
+    window.NUBYX_CONFIG = Object.freeze({
+      ...config,
+      authEnabled: false,
+      supabaseUrl: '',
+      supabaseAnonKey: ''
+    });
+  }
 
   window.NUBYX_IDENTITY = state;
   window.dispatchEvent(new CustomEvent('nubyx:identity-ready', { detail: state }));

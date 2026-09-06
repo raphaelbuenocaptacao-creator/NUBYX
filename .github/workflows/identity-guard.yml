@@ -1,0 +1,91 @@
+name: NUBYX Identity Guard
+
+"on":
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  identity-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify identity runtime fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+          const source = fs.readFileSync('identity-runtime.js', 'utf8');
+
+          function execute(config) {
+            const window = {
+              NUBYX_CONFIG: Object.freeze({ ...config }),
+              dispatchEvent() {},
+              addEventListener() {}
+            };
+            const context = {
+              window,
+              document: { querySelector() { return null; } },
+              CustomEvent: class CustomEvent { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
+              URL,
+              atob(value) { return Buffer.from(value, 'base64').toString('binary'); },
+              Buffer,
+              console
+            };
+            vm.runInNewContext(source, context, { filename: 'identity-runtime.js' });
+            return window;
+          }
+
+          const unsafe = execute({
+            identityLayer: 'aureon',
+            authProvider: 'supabase',
+            aureonProjectId: 'nubyx',
+            aureonBaseUrl: 'https://aureon.example.com',
+            supabaseUrl: 'https://example.supabase.co',
+            supabaseAnonKey: 'browser-unsafe-key',
+            authEnabled: true
+          });
+          assert.equal(unsafe.NUBYX_IDENTITY.failClosed, true);
+          assert.equal(unsafe.NUBYX_IDENTITY.ready, false);
+          assert.equal(unsafe.NUBYX_CONFIG.authEnabled, false);
+          assert.equal(unsafe.NUBYX_CONFIG.supabaseUrl, '');
+          assert.equal(unsafe.NUBYX_CONFIG.supabaseAnonKey, '');
+
+          const incompleteAureon = execute({
+            identityLayer: 'aureon',
+            authProvider: 'supabase',
+            aureonProjectId: 'nubyx',
+            aureonBaseUrl: '',
+            supabaseUrl: 'https://example.supabase.co',
+            supabaseAnonKey: 'sb_publishable_browser_safe',
+            authEnabled: true
+          });
+          assert.equal(incompleteAureon.NUBYX_IDENTITY.failClosed, true);
+          assert.equal(incompleteAureon.NUBYX_CONFIG.authEnabled, false);
+
+          const valid = execute({
+            identityLayer: 'aureon',
+            authProvider: 'supabase',
+            aureonProjectId: 'nubyx',
+            aureonBaseUrl: 'https://aureon.example.com',
+            supabaseUrl: 'https://example.supabase.co',
+            supabaseAnonKey: 'sb_publishable_browser_safe',
+            authEnabled: true
+          });
+          assert.equal(valid.NUBYX_IDENTITY.failClosed, false);
+          assert.equal(valid.NUBYX_IDENTITY.ready, true);
+          assert.equal(valid.NUBYX_CONFIG.authEnabled, true);
+
+          console.log('NUBYX identity fail-closed contract: OK');
+          NODE
