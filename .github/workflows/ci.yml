@@ -132,6 +132,26 @@ jobs:
           console.log(`sw.js: ${staticAssets.length} precache assets verified; ${requiredAssets.length} required assets are covered`);
           NODE
 
+      - name: Validate range-vary cache safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const source = fs.readFileSync('sw.js', 'utf8').toLowerCase();
+          if (!source.includes("request.headers.has('range')") || !source.includes("request.headers.has('if-range')")) {
+            throw new Error('sw.js: Range and If-Range requests must bypass cache');
+          }
+          if (!source.includes('content-range')) {
+            throw new Error('sw.js: Content-Range responses must be rejected');
+          }
+          const varyMatch = source.match(/sensitive_vary_re\s*=\s*\/([^\n]+)\/i/);
+          if (!varyMatch || !varyMatch[1].includes('range') || !varyMatch[1].includes('if-range')) {
+            throw new Error('sw.js: Vary: Range and Vary: If-Range must be treated as cache-sensitive');
+          }
+          console.log('sw.js: range-vary cache protections verified');
+          NODE
+
       - name: Validate index shell dependencies
         shell: bash
         run: |
